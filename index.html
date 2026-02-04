@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GPI FEE COMPARISON TOOL v8.3 - THE UNIVERSE'S BEST STATEMENT ANALYZER
+GPI FEE COMPARISON TOOL v8.4 - THE UNIVERSE'S BEST STATEMENT ANALYZER
 ================================================================================
 MISSION: Build the BEST merchant processing statement analyzer in the universe.
 - EASY TO USE: Zero learning curve, intuitive interface
@@ -26,7 +26,7 @@ OFFLINE CAPABLE: Works without internet connection
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>GPI Fee Analyzer v8.3 - Legendary Edition</title>
+    <title>GPI Fee Analyzer v8.4 - Legendary Edition</title>
     <style>
         :root {
             --primary: #1a5f7a;
@@ -440,7 +440,7 @@ OFFLINE CAPABLE: Works without internet connection
     <div class="header">
         <h1>🏆 GPI Fee Analyzer - The Universe's Best</h1>
         <div class="header-meta">
-            <span class="header-badge">v8.3</span>
+            <span class="header-badge">v8.4</span>
             <span class="header-badge" title="No data is stored or transmitted. Everything runs in your browser only.">🔒 100% Private</span>
             <span class="header-badge">📴 Works Offline</span>
             <span class="header-badge">🤝 Team Shareable</span>
@@ -537,7 +537,9 @@ OFFLINE CAPABLE: Works without internet connection
                 </div>
 
                 <div class="card">
-                    <h3 class="card-title">✏️ Manual Entry</h3>
+                    <h3 class="card-title">💼 GPI Fees</h3>
+                    <p style="color: var(--gray-500); font-size: 0.85rem; margin-bottom: 1rem;">Enter your proposed GPI pricing below. Volume data will come from the uploaded statement.</p>
+
                     <div class="grid-2">
                         <div class="form-group">
                             <label>Merchant Name</label>
@@ -549,51 +551,111 @@ OFFLINE CAPABLE: Works without internet connection
                             <small style="color: var(--gray-500); font-size: 0.75rem;">Interchange rates update April & October</small>
                         </div>
                     </div>
+
                     <div class="form-group">
-                        <label>Processor (if known)</label>
-                        <select id="processorSelect">
-                            <option value="">-- Auto-Detect --</option>
-                            <option value="TSYS">TSYS / Cayan</option>
-                            <option value="FISERV">Fiserv / First Data</option>
-                            <option value="WORLDPAY">Worldpay / FIS</option>
-                            <option value="ELAVON">Elavon / US Bank</option>
-                            <option value="GLOBAL">Global Payments</option>
-                            <option value="CHASE">Chase Paymentech</option>
-                            <option value="HEARTLAND">Heartland</option>
-                            <option value="SQUARE">Square</option>
-                            <option value="STRIPE">Stripe</option>
-                            <option value="PAYPAL">PayPal / Braintree</option>
-                            <option value="CLOVER">Clover / Fiserv</option>
-                            <option value="TOAST">Toast</option>
-                            <option value="EVO">EVO Payments</option>
-                            <option value="PAYSAFE">Paysafe</option>
-                            <option value="DHARMA">Dharma Merchant Services</option>
-                            <option value="HELCIM">Helcim</option>
-                            <option value="STAX">Stax (Fattmerchant)</option>
-                            <option value="PAYMENT_DEPOT">Payment Depot</option>
-                            <option value="CDG">CDG Commerce</option>
-                            <option value="MERCHANT_ONE">Merchant One</option>
-                            <option value="NATIONAL">National Processing</option>
-                            <option value="FLAGSHIP">Flagship Merchant Services</option>
-                            <option value="LEADERS">Leaders Merchant Services</option>
-                            <option value="HOST">Host Merchant Services</option>
-                            <option value="OTHER">Other</option>
+                        <label>GPI Processor / Platform</label>
+                        <select id="gpiProcessorSelect" onchange="updateGpiFeesForm()">
+                            <option value="">-- Select GPI Platform --</option>
+                            <option value="OPENEDGE">OpenEdge</option>
+                            <option value="CAYAN">Cayan</option>
+                            <option value="PGS">PGS</option>
+                            <option value="TSYS">TSYS</option>
                         </select>
                     </div>
-                    <div class="grid-2">
-                        <div class="form-group">
-                            <label>Total Volume ($)</label>
-                            <input type="number" id="totalVolume" placeholder="100000">
+
+                    <!-- Base GPI Fees (shown for all processors) -->
+                    <div id="gpiFeesContainer" class="hidden">
+                        <h4 style="font-size: 0.95rem; color: var(--primary); margin: 1.25rem 0 0.75rem; padding-top: 1rem; border-top: 1px solid var(--gray-200);">📊 Proposed GPI Pricing</h4>
+
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Discount Rate (%)</label>
+                                <input type="number" id="gpiDiscRate" placeholder="0.25" step="0.001" min="0">
+                                <small style="color: var(--gray-500); font-size: 0.7rem;">e.g., 0.25 = 25 basis points</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Per Transaction Fee ($)</label>
+                                <input type="number" id="gpiTranRate" placeholder="0.10" step="0.001" min="0">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Total Fees ($)</label>
-                            <input type="number" id="totalFees" placeholder="2500" step="0.01">
+
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Auth Fee ($)</label>
+                                <input type="number" id="gpiAuthRate" placeholder="0.00" step="0.001" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Batch Fee ($)</label>
+                                <input type="number" id="gpiBatchRate" placeholder="0.00" step="0.01" min="0">
+                            </div>
+                        </div>
+
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Total Monthly Fees ($)</label>
+                                <input type="number" id="gpiMonthlyFees" placeholder="25.00" step="0.01" min="0">
+                                <small style="color: var(--gray-500); font-size: 0.7rem;">Statement fee, gateway, etc.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>PCI Fee ($)</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="number" id="gpiPciFee" placeholder="99.00" step="0.01" min="0" style="flex: 1;">
+                                    <select id="gpiPciFrequency" style="width: 100px;">
+                                        <option value="annual">Annual</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- OpenEdge-specific fees -->
+                        <div id="openedgeFeesSection" class="hidden">
+                            <h4 style="font-size: 0.9rem; color: var(--purple); margin: 1.25rem 0 0.75rem; padding-top: 1rem; border-top: 1px solid var(--gray-200);">🔷 OpenEdge-Specific Fees</h4>
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label>Settlement Funding Fee (%)</label>
+                                    <input type="number" id="gpiSettlementFundingFee" placeholder="0.00" step="0.001" min="0">
+                                    <small style="color: var(--gray-500); font-size: 0.7rem;">% of sales volume</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Risk Funding Fee (%)</label>
+                                    <input type="number" id="gpiRiskFundingFee" placeholder="0.00" step="0.001" min="0">
+                                    <small style="color: var(--gray-500); font-size: 0.7rem;">% of sales volume</small>
+                                </div>
+                            </div>
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label>Settlement PI Rate ($)</label>
+                                    <input type="number" id="gpiSettlementPiRate" placeholder="0.00" step="0.001" min="0">
+                                </div>
+                                <div class="form-group">
+                                    <label>Risk PI Rate ($)</label>
+                                    <input type="number" id="gpiRiskPiRate" placeholder="0.00" step="0.001" min="0">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cayan-specific fees -->
+                        <div id="cayanFeesSection" class="hidden">
+                            <h4 style="font-size: 0.9rem; color: var(--accent); margin: 1.25rem 0 0.75rem; padding-top: 1rem; border-top: 1px solid var(--gray-200);">🔶 Cayan-Specific Fees</h4>
+                            <div class="form-group">
+                                <label>Monthly SaaS Fee (per terminal)</label>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="number" id="gpiSaasQty" placeholder="1" min="1" step="1" style="width: 70px;" onchange="calculateSaasTotal()">
+                                    <span style="color: var(--gray-500);">×</span>
+                                    <input type="number" id="gpiSaasUnitPrice" placeholder="15.00" step="0.01" min="0" style="flex: 1;" onchange="calculateSaasTotal()">
+                                    <span style="color: var(--gray-500);">=</span>
+                                    <span id="gpiSaasTotal" style="font-weight: 600; color: var(--primary); min-width: 70px;">$0.00</span>
+                                </div>
+                                <small style="color: var(--gray-500); font-size: 0.7rem;">Qty × Unit Price = Monthly SaaS Total (separate from Total Monthly Fees)</small>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Total Transactions</label>
-                        <input type="number" id="totalTransactions" placeholder="1500">
-                    </div>
+
+                    <!-- Hidden fields for volume data (populated from uploaded statement) -->
+                    <input type="hidden" id="totalVolume">
+                    <input type="hidden" id="totalFees">
+                    <input type="hidden" id="totalTransactions">
                 </div>
             </div>
 
@@ -1141,6 +1203,122 @@ PCI COMPLIANCE              $19.95
             const notice = document.getElementById('privacyNotice');
             if (notice) notice.style.display = 'none';
             sessionStorage.setItem('privacyDismissed', 'true');
+        }
+
+        // ============================================================
+        // GPI FEES SECTION - Processor-specific fee forms
+        // ============================================================
+
+        function updateGpiFeesForm() {
+            const processor = document.getElementById('gpiProcessorSelect').value;
+            const container = document.getElementById('gpiFeesContainer');
+            const openedgeSection = document.getElementById('openedgeFeesSection');
+            const cayanSection = document.getElementById('cayanFeesSection');
+
+            if (!processor) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            // Show the base fees container
+            container.classList.remove('hidden');
+
+            // Hide all processor-specific sections first
+            openedgeSection.classList.add('hidden');
+            cayanSection.classList.add('hidden');
+
+            // Show processor-specific sections
+            if (processor === 'OPENEDGE') {
+                openedgeSection.classList.remove('hidden');
+            } else if (processor === 'CAYAN') {
+                cayanSection.classList.remove('hidden');
+            }
+            // PGS and TSYS only show base fees (no special sections)
+
+            console.log('GPI Processor selected:', processor);
+        }
+
+        function calculateSaasTotal() {
+            const qty = parseFloat(document.getElementById('gpiSaasQty').value) || 0;
+            const unitPrice = parseFloat(document.getElementById('gpiSaasUnitPrice').value) || 0;
+            const total = qty * unitPrice;
+            document.getElementById('gpiSaasTotal').textContent = '$' + total.toFixed(2);
+        }
+
+        function getGpiPricingData() {
+            const processor = document.getElementById('gpiProcessorSelect').value;
+            if (!processor) return null;
+
+            const data = {
+                processor: processor,
+                discRate: parseFloat(document.getElementById('gpiDiscRate').value) || 0,
+                tranRate: parseFloat(document.getElementById('gpiTranRate').value) || 0,
+                authRate: parseFloat(document.getElementById('gpiAuthRate').value) || 0,
+                batchRate: parseFloat(document.getElementById('gpiBatchRate').value) || 0,
+                monthlyFees: parseFloat(document.getElementById('gpiMonthlyFees').value) || 0,
+                pciFee: parseFloat(document.getElementById('gpiPciFee').value) || 0,
+                pciFrequency: document.getElementById('gpiPciFrequency').value
+            };
+
+            // Add OpenEdge-specific fields
+            if (processor === 'OPENEDGE') {
+                data.settlementFundingFee = parseFloat(document.getElementById('gpiSettlementFundingFee').value) || 0;
+                data.riskFundingFee = parseFloat(document.getElementById('gpiRiskFundingFee').value) || 0;
+                data.settlementPiRate = parseFloat(document.getElementById('gpiSettlementPiRate').value) || 0;
+                data.riskPiRate = parseFloat(document.getElementById('gpiRiskPiRate').value) || 0;
+            }
+
+            // Add Cayan-specific fields
+            if (processor === 'CAYAN') {
+                data.saasQty = parseFloat(document.getElementById('gpiSaasQty').value) || 0;
+                data.saasUnitPrice = parseFloat(document.getElementById('gpiSaasUnitPrice').value) || 0;
+                data.saasTotal = data.saasQty * data.saasUnitPrice;
+            }
+
+            return data;
+        }
+
+        function calculateGpiTotalFees(gpiPricing, volume, transactions) {
+            if (!gpiPricing || !volume) return 0;
+
+            let total = 0;
+
+            // Discount rate (% of volume)
+            total += (gpiPricing.discRate / 100) * volume;
+
+            // Per-transaction fee
+            total += gpiPricing.tranRate * transactions;
+
+            // Auth fee (per transaction)
+            total += gpiPricing.authRate * transactions;
+
+            // Batch fee (assume 30 batches/month for daily settlement)
+            total += gpiPricing.batchRate * 30;
+
+            // Monthly fees
+            total += gpiPricing.monthlyFees;
+
+            // PCI fee (convert annual to monthly if needed)
+            if (gpiPricing.pciFrequency === 'annual') {
+                total += gpiPricing.pciFee / 12;
+            } else {
+                total += gpiPricing.pciFee;
+            }
+
+            // OpenEdge-specific fees
+            if (gpiPricing.processor === 'OPENEDGE') {
+                total += (gpiPricing.settlementFundingFee / 100) * volume;
+                total += (gpiPricing.riskFundingFee / 100) * volume;
+                total += gpiPricing.settlementPiRate * transactions;
+                total += gpiPricing.riskPiRate * transactions;
+            }
+
+            // Cayan SaaS fee
+            if (gpiPricing.processor === 'CAYAN') {
+                total += gpiPricing.saasTotal;
+            }
+
+            return total;
         }
 
         function setupActivityListeners() {
