@@ -3850,6 +3850,338 @@ PCI COMPLIANCE              $19.95
             }
         ];
 
+        // ============================================================
+        // PHASE 3: PROCESSOR FINGERPRINTING & SECTION CONTEXT ENGINE
+        // Auto-detects processor and uses section context for categorization
+        // Added: February 5, 2026
+        // ============================================================
+
+        const PROCESSOR_FINGERPRINTS = {
+            CardConnect: {
+                patterns: [
+                    /YOUR CARD PROCESSING STATEMENT/i,
+                    /CardPointe/i,
+                    /cardconnect/i
+                ],
+                weight: 3,
+                sections: {
+                    PASS_THROUGH: [/Interchange charges/i, /Interchange Charges/i],
+                    CONTROLLABLE: [/Service charges/i, /Service Charges/i]
+                }
+            },
+            WorldPay: {
+                patterns: [
+                    /WorldPay/i,
+                    /WORLDPAY/i,
+                    /Vantiv/i
+                ],
+                weight: 3,
+                sections: {
+                    PASS_THROUGH: [/INTERCHANGE/i, /ASSESSMENTS/i],
+                    CONTROLLABLE: [/PROCESSING FEES/i, /OTHER FEES/i]
+                },
+                suffixRules: {
+                    'Processing Fee': 'CONTROLLABLE'
+                }
+            },
+            Heartland: {
+                patterns: [
+                    /ONE HEARTLAND WAY/i,
+                    /JEFFERSONVILLE IN/i,
+                    /Heartland/i,
+                    /Passport/i,
+                    /\(800\) 654-9256/
+                ],
+                weight: 3,
+                sections: {
+                    PASS_THROUGH: [/Pass-?thru/i, /Pass Through/i],
+                    CONTROLLABLE: [/HPS Processing/i, /Processing Fees/i]
+                },
+                specialRules: {
+                    suffix24: {
+                        pattern: /\(24\)$/,
+                        category: 'PASS_THROUGH'
+                    }
+                }
+            },
+            Paysafe: {
+                patterns: [
+                    /Paysafe/i,
+                    /PAYSAFE/i,
+                    /Riverside/i
+                ],
+                weight: 3,
+                exactMatches: {
+                    'DISC1': 'CONTROLLABLE',
+                    'DISC 1': 'CONTROLLABLE',
+                    'DATAWIRE': 'CONTROLLABLE',
+                    'INTERCHANGE': 'PASS_THROUGH',
+                    'DUES&ASSESSMENTS': 'PASS_THROUGH',
+                    'DUES & ASSESSMENTS': 'PASS_THROUGH'
+                }
+            },
+            EVO: {
+                patterns: [
+                    /OMEGA Processing/i,
+                    /omegap\.com/i,
+                    /EVO/i,
+                    /1\.866\.888\.9724/
+                ],
+                weight: 3,
+                sections: {
+                    PASS_THROUGH: [/Pass Through/i, /Pass-Through/i],
+                    CONTROLLABLE: [/Settlement\/Discount/i, /Settlement Discount/i]
+                },
+                codeRules: {
+                    '8xxx': { pattern: /^8\d{3}/, category: 'PASS_THROUGH' },
+                    '6xxx': { pattern: /^6\d{3}/, category: 'CONTROLLABLE' },
+                    '7xxx': { pattern: /^7\d{3}/, category: 'CONTROLLABLE' }
+                },
+                rateRules: {
+                    markup: { pattern: /0\.2000%/, category: 'CONTROLLABLE' },
+                    interchange: { pattern: /[2-3]\.\d{4}%/, category: 'PASS_THROUGH' }
+                }
+            },
+            FirstData: {
+                patterns: [
+                    /First Data \| Express/i,
+                    /BusinessTrack/i,
+                    /businesstrack\.com/i,
+                    /SpendTrend/i,
+                    /1-877-273-8191/
+                ],
+                weight: 3,
+                sections: {
+                    PASS_THROUGH: [/Interchange charges/i],
+                    CONTROLLABLE: [/Service charges/i]
+                },
+                tieredRules: {
+                    pattern: /(MID-?QUAL|NON-?QUAL|QUAL)/i,
+                    category: 'CONTROLLABLE'
+                },
+                formatRules: {
+                    discountRate: { pattern: /\.\d{4}\s*DISC\s*RATE/i, category: 'CONTROLLABLE' },
+                    transactionFee: { pattern: /TRANS.*FEE.*\d+.*TRANSACTIONS\s*AT/i, category: 'CONTROLLABLE' },
+                    accessFee: { pattern: /ACCESS\s*FEE.*\d+.*TRANSACTIONS\s*AT/i, category: 'PASS_THROUGH' }
+                }
+            }
+        };
+
+        // Detected processor for current statement (set during extraction)
+        let detectedProcessor = null;
+        let currentSectionContext = null;
+
+        /**
+         * Detect processor from statement text
+         * @param {string} text - Full statement text
+         * @returns {string|null} - Processor name or null
+         */
+        function detectProcessor(text) {
+            const scores = {};
+
+            for (const [processor, config] of Object.entries(PROCESSOR_FINGERPRINTS)) {
+                scores[processor] = 0;
+                for (const pattern of config.patterns) {
+                    if (pattern.test(text)) {
+                        scores[processor] += config.weight;
+                    }
+                }
+            }
+
+            // Find highest scoring processor
+            let maxScore = 0;
+            let detected = null;
+            for (const [processor, score] of Object.entries(scores)) {
+                if (score > maxScore) {
+                    maxScore = score;
+                    detected = processor;
+                }
+            }
+
+            // Only return if score is significant
+            if (maxScore >= 3) {
+                detectedProcessor = detected;
+                console.log(`[Phase 3] Detected processor: ${detected} (score: ${maxScore})`);
+                return detected;
+            }
+
+            return null;
+        }
+
+        /**
+         * Detect section context from surrounding text
+         * @param {string} text - Text surrounding the fee
+         * @param {string} processor - Detected processor name
+         * @returns {string|null} - 'PASS_THROUGH', 'CONTROLLABLE', or null
+         */
+        function detectSectionContext(text, processor) {
+            if (!processor || !PROCESSOR_FINGERPRINTS[processor]) {
+                return null;
+            }
+
+            const config = PROCESSOR_FINGERPRINTS[processor];
+            if (!config.sections) {
+                return null;
+            }
+
+            // Check for section headers in the text
+            for (const [category, patterns] of Object.entries(config.sections)) {
+                for (const pattern of patterns) {
+                    if (pattern.test(text)) {
+                        currentSectionContext = category;
+                        return category;
+                    }
+                }
+            }
+
+            return currentSectionContext; // Return last known section
+        }
+
+        /**
+         * Apply processor-specific rules for fee categorization
+         * @param {string} feeName - Fee name to categorize
+         * @param {string} processor - Detected processor
+         * @param {string} lineText - Full line text (for rate detection)
+         * @returns {object|null} - Category result or null
+         */
+        function applyProcessorRules(feeName, processor, lineText = '') {
+            if (!processor || !PROCESSOR_FINGERPRINTS[processor]) {
+                return null;
+            }
+
+            const config = PROCESSOR_FINGERPRINTS[processor];
+            const upperName = feeName.toUpperCase();
+
+            // Check exact matches (Paysafe style)
+            if (config.exactMatches) {
+                const normalized = upperName.replace(/\s+/g, '');
+                for (const [match, category] of Object.entries(config.exactMatches)) {
+                    if (normalized === match.replace(/\s+/g, '').toUpperCase() ||
+                        upperName === match.toUpperCase()) {
+                        return {
+                            category: category,
+                            confidence: 0.98,
+                            source: `${processor} exact match`
+                        };
+                    }
+                }
+            }
+
+            // Check suffix rules (WorldPay style)
+            if (config.suffixRules) {
+                for (const [suffix, category] of Object.entries(config.suffixRules)) {
+                    if (upperName.endsWith(suffix.toUpperCase())) {
+                        return {
+                            category: category,
+                            confidence: 0.95,
+                            source: `${processor} suffix rule`
+                        };
+                    }
+                }
+            }
+
+            // Check special rules (Heartland (24) suffix)
+            if (config.specialRules) {
+                for (const [ruleName, rule] of Object.entries(config.specialRules)) {
+                    if (rule.pattern.test(feeName)) {
+                        return {
+                            category: rule.category,
+                            confidence: 0.95,
+                            source: `${processor} ${ruleName} rule`
+                        };
+                    }
+                }
+            }
+
+            // Check code rules (EVO 8xxx, 6xxx, 7xxx)
+            if (config.codeRules) {
+                for (const [codeName, rule] of Object.entries(config.codeRules)) {
+                    if (rule.pattern.test(feeName)) {
+                        return {
+                            category: rule.category,
+                            confidence: 0.90,
+                            source: `${processor} ${codeName} code rule`
+                        };
+                    }
+                }
+            }
+
+            // Check rate rules (EVO 0.2000% vs 2.xxx%)
+            if (config.rateRules && lineText) {
+                for (const [rateName, rule] of Object.entries(config.rateRules)) {
+                    if (rule.pattern.test(lineText)) {
+                        return {
+                            category: rule.category,
+                            confidence: 0.90,
+                            source: `${processor} ${rateName} rate rule`
+                        };
+                    }
+                }
+            }
+
+            // Check tiered rules (First Data QUAL/MID-QUAL/NON-QUAL)
+            if (config.tieredRules) {
+                if (config.tieredRules.pattern.test(feeName)) {
+                    return {
+                        category: config.tieredRules.category,
+                        confidence: 0.95,
+                        source: `${processor} tiered pricing rule`
+                    };
+                }
+            }
+
+            // Check format rules (First Data discount rate, transaction fee)
+            if (config.formatRules && lineText) {
+                for (const [formatName, rule] of Object.entries(config.formatRules)) {
+                    if (rule.pattern.test(lineText)) {
+                        return {
+                            category: rule.category,
+                            confidence: 0.95,
+                            source: `${processor} ${formatName} format rule`
+                        };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * Enhanced fee categorization with Phase 3 context
+         * Priority: Processor Rules > Exclusion Rules > Hidden Fees > Patterns
+         */
+        function categorizeFeeWithContext(feeName, options = {}) {
+            const { processor, sectionContext, lineText } = options;
+
+            // STEP 0: Apply processor-specific rules (highest priority)
+            if (processor) {
+                const processorResult = applyProcessorRules(feeName, processor, lineText);
+                if (processorResult) {
+                    return {
+                        ...processorResult,
+                        isHidden: false
+                    };
+                }
+            }
+
+            // STEP 0.5: Use section context if available
+            if (sectionContext && (sectionContext === 'PASS_THROUGH' || sectionContext === 'CONTROLLABLE')) {
+                // Only use section context for ambiguous fees
+                const basicResult = categorizeFee(feeName);
+                if (basicResult.category === 'REVIEW' || basicResult.confidence < 0.8) {
+                    return {
+                        category: sectionContext,
+                        confidence: 0.85,
+                        isHidden: false,
+                        source: 'section context'
+                    };
+                }
+            }
+
+            // Fall back to standard categorization
+            return categorizeFee(feeName);
+        }
+
         function categorizeFee(feeName) {
             const upperName = feeName.toUpperCase();
 

@@ -1,0 +1,207 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-02-05",
+    "description": "Processor fingerprinting patterns for auto-detection and section-based categorization"
+  },
+  "processors": {
+    "CardConnect": {
+      "fingerprints": [
+        {"pattern": "YOUR CARD PROCESSING STATEMENT", "weight": 3},
+        {"pattern": "CardPointe", "weight": 3},
+        {"pattern": "cardconnect", "weight": 3},
+        {"pattern": "CardConnect", "weight": 3},
+        {"pattern": "First Data", "weight": 1},
+        {"pattern": "Fiserv", "weight": 1}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Interchange charges", "Interchange Charges"],
+        "CONTROLLABLE": ["Service charges", "Service Charges"],
+        "MIXED": ["Fees"]
+      },
+      "sectionPatterns": {
+        "interchangeStart": "(?:Type|Category).*Interchange charges",
+        "serviceStart": "(?:Type|Category).*Service charges",
+        "feesStart": "(?:Type|Category).*Fees"
+      }
+    },
+    "WorldPay": {
+      "fingerprints": [
+        {"pattern": "WorldPay", "weight": 3},
+        {"pattern": "WORLDPAY", "weight": 3},
+        {"pattern": "Vantiv", "weight": 2},
+        {"pattern": "FIS", "weight": 1},
+        {"pattern": "Processing Statement", "weight": 1}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["INTERCHANGE", "Interchange", "ASSESSMENTS", "Assessment"],
+        "CONTROLLABLE": ["PROCESSING FEES", "Processing Fees", "OTHER FEES"]
+      },
+      "sectionPatterns": {
+        "interchangeStart": "INTERCHANGE\\s*(FEES|&|AND)?",
+        "processingStart": "PROCESSING\\s*FEES",
+        "otherStart": "OTHER\\s*FEES"
+      },
+      "feeNameSuffix": {
+        "Processing Fee": "CONTROLLABLE"
+      }
+    },
+    "Heartland": {
+      "fingerprints": [
+        {"pattern": "ONE HEARTLAND WAY", "weight": 3},
+        {"pattern": "JEFFERSONVILLE IN", "weight": 3},
+        {"pattern": "Heartland", "weight": 3},
+        {"pattern": "Passport", "weight": 2},
+        {"pattern": "HPS", "weight": 2},
+        {"pattern": "(800) 654-9256", "weight": 2}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Pass-thru", "Pass-Thru", "Pass Thru", "Interchange"],
+        "CONTROLLABLE": ["HPS Processing", "Processing Fees", "Value Added"]
+      },
+      "sectionPatterns": {
+        "passThruStart": "Pass[- ]?thru|Pass[- ]?Through",
+        "processingStart": "HPS\\s*Processing|Processing\\s*Fees"
+      },
+      "specialRules": {
+        "suffix24": {
+          "pattern": "\\(24\\)$",
+          "category": "PASS_THROUGH",
+          "reason": "Heartland billing cycle suffix indicates interchange"
+        }
+      }
+    },
+    "Paysafe": {
+      "fingerprints": [
+        {"pattern": "Paysafe", "weight": 3},
+        {"pattern": "PAYSAFE", "weight": 3},
+        {"pattern": "Riverside", "weight": 2},
+        {"pattern": "iPayment", "weight": 2}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["INTERCHANGE", "DUES", "ASSESSMENTS"],
+        "CONTROLLABLE": ["DISC 1", "DISC1", "DATAWIRE"]
+      },
+      "exactMatches": {
+        "DISC1": "CONTROLLABLE",
+        "DISC 1": "CONTROLLABLE",
+        "DATAWIRE": "CONTROLLABLE",
+        "INTERCHANGE": "PASS_THROUGH",
+        "DUES&ASSESSMENTS": "PASS_THROUGH"
+      }
+    },
+    "EVO": {
+      "fingerprints": [
+        {"pattern": "OMEGA Processing", "weight": 3},
+        {"pattern": "omegap.com", "weight": 3},
+        {"pattern": "EVO", "weight": 2},
+        {"pattern": "1.866.888.9724", "weight": 2},
+        {"pattern": "Support@omegap.com", "weight": 2}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Pass Through", "Pass-Through"],
+        "CONTROLLABLE": ["Settlement/Discount", "Settlement Discount"]
+      },
+      "sectionPatterns": {
+        "passThruStart": "Pass[- ]?Through",
+        "settlementStart": "Settlement[/\\s]?Discount"
+      },
+      "codeRules": {
+        "8xxx": {
+          "pattern": "^8\\d{3}",
+          "defaultCategory": "PASS_THROUGH",
+          "reason": "EVO 8xxx codes are typically assessments/network fees"
+        },
+        "6xxx": {
+          "pattern": "^6\\d{3}",
+          "defaultCategory": "CONTROLLABLE",
+          "reason": "EVO 6xxx codes are typically processor fees"
+        },
+        "7xxx": {
+          "pattern": "^7\\d{3}",
+          "defaultCategory": "CONTROLLABLE",
+          "reason": "EVO 7xxx codes are typically gateway/VPN fees"
+        }
+      },
+      "rateRules": {
+        "markup": {
+          "pattern": "0\\.2000%",
+          "category": "CONTROLLABLE",
+          "reason": "Uniform 0.20% rate indicates Settlement/Discount markup"
+        },
+        "interchange": {
+          "pattern": "[2-3]\\.\\d{4}%",
+          "category": "PASS_THROUGH",
+          "reason": "2-3% rate indicates actual interchange"
+        }
+      }
+    },
+    "FirstData": {
+      "fingerprints": [
+        {"pattern": "First Data | Express", "weight": 3},
+        {"pattern": "BusinessTrack", "weight": 3},
+        {"pattern": "businesstrack.com", "weight": 3},
+        {"pattern": "SpendTrend", "weight": 2},
+        {"pattern": "1-877-273-8191", "weight": 2},
+        {"pattern": "Clover", "weight": 1}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Interchange charges"],
+        "CONTROLLABLE": ["Service charges"],
+        "MIXED": ["Fees"]
+      },
+      "tieredPatterns": {
+        "QUAL": "CONTROLLABLE",
+        "MID-QUAL": "CONTROLLABLE",
+        "NON-QUAL": "CONTROLLABLE"
+      },
+      "feeFormats": {
+        "discountRate": {
+          "pattern": "\\.\\d{4}\\s*DISC\\s*RATE\\s*TIMES",
+          "category": "CONTROLLABLE"
+        },
+        "transactionFee": {
+          "pattern": "TRANS(ACTION)?\\s*FEE\\s*\\d+\\s*TRANSACTIONS\\s*AT",
+          "category": "CONTROLLABLE"
+        },
+        "accessFee": {
+          "pattern": "ACCESS\\s*FEE\\s*\\d+\\s*TRANSACTIONS\\s*AT",
+          "category": "PASS_THROUGH"
+        }
+      }
+    },
+    "TSYS": {
+      "fingerprints": [
+        {"pattern": "TSYS", "weight": 3},
+        {"pattern": "BB&T", "weight": 2},
+        {"pattern": "Global Payments", "weight": 2}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Interchange", "Assessments", "Network Fees"],
+        "CONTROLLABLE": ["Processing Fees", "Service Fees"]
+      }
+    },
+    "Chase": {
+      "fingerprints": [
+        {"pattern": "Chase Paymentech", "weight": 3},
+        {"pattern": "Paymentech", "weight": 3},
+        {"pattern": "JPMorgan", "weight": 2}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Interchange", "Assessment"],
+        "CONTROLLABLE": ["Discount", "Service"]
+      }
+    },
+    "Elavon": {
+      "fingerprints": [
+        {"pattern": "Elavon", "weight": 3},
+        {"pattern": "US Bank", "weight": 2},
+        {"pattern": "ELAVON", "weight": 3}
+      ],
+      "sections": {
+        "PASS_THROUGH": ["Interchange", "Dues & Assessments"],
+        "CONTROLLABLE": ["Discount", "Service Fees"]
+      }
+    }
+  }
+}
