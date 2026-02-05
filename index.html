@@ -726,10 +726,23 @@ OFFLINE CAPABLE: Works without internet connection
                         </div>
                     </div>
 
-                    <!-- Hidden fields for volume data (populated from uploaded statement) -->
-                    <input type="hidden" id="totalVolume">
-                    <input type="hidden" id="totalFees">
-                    <input type="hidden" id="totalTransactions">
+                    <!-- Statement Summary - auto-filled from upload OR enter manually -->
+                    <h4 style="font-size: 0.95rem; color: var(--primary); margin: 1.25rem 0 0.75rem; padding-top: 1rem; border-top: 1px solid var(--gray-200);">📈 Statement Summary</h4>
+                    <p style="color: var(--gray-500); font-size: 0.8rem; margin-bottom: 0.75rem;">Auto-filled from uploaded statement. Edit if needed:</p>
+                    <div class="grid-3">
+                        <div class="form-group">
+                            <label>Total Volume ($)</label>
+                            <input type="number" id="totalVolume" placeholder="e.g., 120700" step="0.01" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Total Fees ($)</label>
+                            <input type="number" id="totalFees" placeholder="e.g., 2850" step="0.01" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Total Transactions</label>
+                            <input type="number" id="totalTransactions" placeholder="e.g., 1500" step="1" min="0">
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1198,7 +1211,18 @@ PCI COMPLIANCE              $19.95
             rawText: '',
             statementPeriod: null, // Statement date for interchange rate context
             interchangeRateCycle: null, // Which rate cycle applies (Apr/Oct)
-            // NEW: Card-type rate decomposition
+            // Comparison tab state
+            compareReady: false,
+            compareVolume: 0,
+            compareTransactions: 0,
+            compareCurrentFees: 0,
+            comparePassThrough: 0,
+            compareControllable: 0,
+            // MCC/Benchmark state
+            mccCode: null,
+            mccCategory: null,
+            mccName: null,
+            // Card-type rate decomposition
             cardTypeBreakdown: {
                 visa: { volume: 0, fees: 0, rate: 0, transactions: 0 },
                 mastercard: { volume: 0, fees: 0, rate: 0, transactions: 0 },
@@ -1519,6 +1543,17 @@ PCI COMPLIANCE              $19.95
                 rawText: '',
                 statementPeriod: null,
                 interchangeRateCycle: null,
+                // Comparison tab state
+                compareReady: false,
+                compareVolume: 0,
+                compareTransactions: 0,
+                compareCurrentFees: 0,
+                comparePassThrough: 0,
+                compareControllable: 0,
+                // MCC/Benchmark state
+                mccCode: null,
+                mccCategory: null,
+                mccName: null,
                 cardTypeBreakdown: {
                     visa: { volume: 0, fees: 0, rate: 0, transactions: 0 },
                     mastercard: { volume: 0, fees: 0, rate: 0, transactions: 0 },
@@ -1622,9 +1657,34 @@ PCI COMPLIANCE              $19.95
             console.log('Drop zone initialized');
         }
 
+        // Configuration constants for file processing
+        const FILE_SIZE_LIMIT_MB = 50;
+        const FILE_SIZE_LIMIT_BYTES = FILE_SIZE_LIMIT_MB * 1024 * 1024;
+        const OCR_PAGE_LIMIT = 20;
+        const OCR_TIMEOUT_MS = 120000; // 2 minutes per page
+        const PDF_LOAD_TIMEOUT_MS = 30000; // 30 seconds for PDF loading
+
+        // Utility function to wrap operations with timeout
+        function withTimeout(promise, ms, operation = 'Operation') {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error(`${operation} timed out after ${ms / 1000} seconds. Try a smaller file or fewer pages.`)), ms)
+                )
+            ]);
+        }
+
         async function processFile(file) {
             console.log('Processing file:', file.name, 'Type:', file.type, 'Size:', file.size);
             showProgress('Reading file...', 10);
+
+            // Check file size limit
+            if (file.size > FILE_SIZE_LIMIT_BYTES) {
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                alert(`File too large: ${fileSizeMB}MB exceeds the ${FILE_SIZE_LIMIT_MB}MB limit.\n\nTip: Try splitting the PDF or uploading individual page screenshots.`);
+                hideProgress();
+                return;
+            }
 
             // Start session timer when data is first loaded
             startSessionTimer();
@@ -1696,8 +1756,29 @@ PCI COMPLIANCE              $19.95
             }
 
             const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+            // Try to load PDF with password protection handling
+            let pdf;
+            try {
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                pdf = await withTimeout(loadingTask.promise, PDF_LOAD_TIMEOUT_MS, 'PDF loading');
+            } catch (error) {
+                // Handle password-protected PDFs
+                if (error.name === 'PasswordException' ||
+                    (error.message && error.message.toLowerCase().includes('password'))) {
+                    throw new Error('This PDF is password-protected. Please remove the password protection or paste the text manually.');
+                }
+                // Handle corrupted or invalid PDFs
+                if (error.name === 'InvalidPDFException' ||
+                    (error.message && error.message.toLowerCase().includes('invalid'))) {
+                    throw new Error('This PDF appears to be corrupted or invalid. Please try a different file or paste the text manually.');
+                }
+                throw error;
+            }
+
             let fullText = '';
+            let totalCharCount = 0;
+            let pagesWithText = 0;
 
             showProgress('Extracting text from ' + pdf.numPages + ' pages...', 20);
 
@@ -1707,13 +1788,46 @@ PCI COMPLIANCE              $19.95
                 const content = await page.getTextContent();
                 const pageText = content.items.map(item => item.str).join(' ');
                 fullText += pageText + '\n';
+
+                // Track text extraction quality
+                const trimmedPageText = pageText.trim();
+                totalCharCount += trimmedPageText.length;
+                if (trimmedPageText.length > 20) {
+                    pagesWithText++;
+                }
+
                 showProgress('Reading page ' + i + '/' + pdf.numPages, 20 + (i / pdf.numPages) * 30);
             }
 
-            // If no text found, this is likely a scanned PDF - use OCR
-            if (fullText.trim().length < 50) {
-                console.log('PDF appears to be scanned/image-based. Running OCR...');
+            // Improved scanned PDF detection:
+            // - Less than 100 chars total, OR
+            // - Less than 20% of pages have meaningful text (>20 chars), OR
+            // - Average chars per page is very low (<30 chars)
+            const avgCharsPerPage = totalCharCount / pdf.numPages;
+            const pagesWithTextRatio = pagesWithText / pdf.numPages;
+            const isLikelyScanned = totalCharCount < 100 ||
+                                    pagesWithTextRatio < 0.2 ||
+                                    avgCharsPerPage < 30;
+
+            if (isLikelyScanned) {
+                console.log('PDF appears to be scanned/image-based. Stats:', {
+                    totalChars: totalCharCount,
+                    avgCharsPerPage: avgCharsPerPage.toFixed(1),
+                    pagesWithText: pagesWithText,
+                    pagesWithTextRatio: (pagesWithTextRatio * 100).toFixed(1) + '%'
+                });
                 showProgress('Scanned PDF detected - Running OCR...', 40);
+
+                // Check page count limit for OCR
+                if (pdf.numPages > OCR_PAGE_LIMIT) {
+                    const proceed = confirm(
+                        `This scanned PDF has ${pdf.numPages} pages. OCR processing is limited to ${OCR_PAGE_LIMIT} pages to ensure reasonable processing time.\n\n` +
+                        `Click OK to process the first ${OCR_PAGE_LIMIT} pages, or Cancel to abort and try a smaller file.`
+                    );
+                    if (!proceed) {
+                        throw new Error('OCR cancelled by user. Try uploading a smaller PDF or individual page screenshots.');
+                    }
+                }
 
                 // Load Tesseract if needed
                 if (typeof Tesseract === 'undefined') {
@@ -1725,10 +1839,11 @@ PCI COMPLIANCE              $19.95
                 }
 
                 fullText = '';
+                const pagesToProcess = Math.min(pdf.numPages, OCR_PAGE_LIMIT);
 
                 // Render each page as image and OCR it
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    showProgress('OCR processing page ' + i + '/' + pdf.numPages + '...', 40 + (i / pdf.numPages) * 50);
+                for (let i = 1; i <= pagesToProcess; i++) {
+                    showProgress('OCR processing page ' + i + '/' + pagesToProcess + '...', 40 + (i / pagesToProcess) * 50);
 
                     const page = await pdf.getPage(i);
                     const scale = 2.0; // Higher scale = better OCR accuracy
@@ -1746,28 +1861,80 @@ PCI COMPLIANCE              $19.95
                         viewport: viewport
                     }).promise;
 
+                    // Apply image preprocessing for better OCR accuracy
+                    preprocessCanvasForOCR(context, canvas.width, canvas.height);
+
                     // Convert canvas to blob for Tesseract
                     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
-                    // Run OCR on the rendered page
-                    const result = await Tesseract.recognize(blob, 'eng', {
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                const pageProgress = 40 + ((i - 1) / pdf.numPages) * 50;
-                                const ocrProgress = (m.progress / pdf.numPages) * 50;
-                                showProgress('OCR page ' + i + ': ' + Math.round(m.progress * 100) + '%', pageProgress + ocrProgress);
+                    // Run OCR on the rendered page with timeout protection
+                    try {
+                        const ocrPromise = Tesseract.recognize(blob, 'eng', {
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    const pageProgress = 40 + ((i - 1) / pagesToProcess) * 50;
+                                    const ocrProgress = (m.progress / pagesToProcess) * 50;
+                                    showProgress('OCR page ' + i + ': ' + Math.round(m.progress * 100) + '%', pageProgress + ocrProgress);
+                                }
                             }
-                        }
-                    });
+                        });
 
-                    fullText += result.data.text + '\n\n';
-                    console.log('OCR page ' + i + ' complete:', result.data.text.length, 'characters');
+                        const result = await withTimeout(ocrPromise, OCR_TIMEOUT_MS, `OCR on page ${i}`);
+                        fullText += result.data.text + '\n\n';
+                        console.log('OCR page ' + i + ' complete:', result.data.text.length, 'characters');
+                    } catch (ocrError) {
+                        console.error('OCR error on page ' + i + ':', ocrError);
+                        if (ocrError.message.includes('timed out')) {
+                            fullText += `[Page ${i}: OCR timed out]\n\n`;
+                        } else {
+                            fullText += `[Page ${i}: OCR failed]\n\n`;
+                        }
+                    }
+                }
+
+                if (pdf.numPages > OCR_PAGE_LIMIT) {
+                    fullText += `\n[Note: Only the first ${OCR_PAGE_LIMIT} of ${pdf.numPages} pages were processed due to OCR limits]\n`;
                 }
 
                 console.log('OCR complete. Total characters:', fullText.length);
             }
 
             return fullText;
+        }
+
+        // Image preprocessing to improve OCR accuracy on poor quality images
+        function preprocessCanvasForOCR(context, width, height) {
+            try {
+                const imageData = context.getImageData(0, 0, width, height);
+                const data = imageData.data;
+
+                // Convert to grayscale and apply contrast enhancement
+                for (let i = 0; i < data.length; i += 4) {
+                    // Convert to grayscale using luminosity method
+                    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+                    // Apply contrast enhancement (stretch histogram)
+                    // This helps with faded or low-contrast documents
+                    let enhanced = ((gray - 128) * 1.2) + 128;
+                    enhanced = Math.max(0, Math.min(255, enhanced));
+
+                    // Apply adaptive thresholding for very low contrast
+                    // Values close to middle gray get pushed toward white or black
+                    if (enhanced > 100 && enhanced < 200) {
+                        enhanced = enhanced > 150 ? Math.min(255, enhanced + 30) : Math.max(0, enhanced - 30);
+                    }
+
+                    data[i] = enhanced;     // R
+                    data[i + 1] = enhanced; // G
+                    data[i + 2] = enhanced; // B
+                    // Alpha channel (data[i + 3]) unchanged
+                }
+
+                context.putImageData(imageData, 0, 0);
+            } catch (e) {
+                // If preprocessing fails (e.g., CORS issues), continue without it
+                console.warn('Image preprocessing skipped:', e.message);
+            }
         }
 
         async function extractImageText(file) {
@@ -1780,15 +1947,38 @@ PCI COMPLIANCE              $19.95
                 }
             }
 
-            const result = await Tesseract.recognize(file, 'eng', {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        showProgress('OCR: ' + Math.round(m.progress * 100) + '%', 30 + m.progress * 40);
-                    }
-                }
-            });
+            // Create a canvas for image preprocessing
+            const img = await createImageBitmap(file);
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            context.drawImage(img, 0, 0);
 
-            return result.data.text;
+            // Apply preprocessing for better OCR accuracy
+            preprocessCanvasForOCR(context, canvas.width, canvas.height);
+
+            // Convert preprocessed canvas to blob
+            const processedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+            // Run OCR with timeout protection
+            try {
+                const ocrPromise = Tesseract.recognize(processedBlob, 'eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            showProgress('OCR: ' + Math.round(m.progress * 100) + '%', 30 + m.progress * 40);
+                        }
+                    }
+                });
+
+                const result = await withTimeout(ocrPromise, OCR_TIMEOUT_MS, 'Image OCR');
+                return result.data.text;
+            } catch (error) {
+                if (error.message.includes('timed out')) {
+                    throw new Error('OCR processing timed out. Try a smaller or clearer image.');
+                }
+                throw error;
+            }
         }
 
         function loadScript(src) {
@@ -1816,24 +2006,81 @@ PCI COMPLIANCE              $19.95
         // ============================================================
 
         const PROCESSOR_PATTERNS = {
-            'TSYS': { patterns: ['TSYS', 'CAYAN', 'TRANSFIRST', 'VITAL'], confidence: 0.9 },
-            'FISERV': { patterns: ['FISERV', 'FIRST DATA', 'FIRSTDATA', 'CARDNET', 'BAMS', 'BANK OF AMERICA MERCHANT'], confidence: 0.9 },
-            'WORLDPAY': { patterns: ['WORLDPAY', 'VANTIV', 'SPREEDLY', 'FIS WORLDPAY'], confidence: 0.9 },
-            'ELAVON': { patterns: ['ELAVON', 'US BANK', 'NOVA'], confidence: 0.9 },
-            'GLOBAL': { patterns: ['GLOBAL PAYMENTS', 'HEARTLAND', 'OPENEDGE', 'ACTIVE NETWORK'], confidence: 0.9 },
-            'CHASE': { patterns: ['CHASE PAYMENTECH', 'PAYMENTECH', 'JPMORGAN'], confidence: 0.9 },
-            'SQUARE': { patterns: ['SQUARE', 'BLOCK INC', 'SQ '], confidence: 0.95 },
-            'STRIPE': { patterns: ['STRIPE'], confidence: 0.95 },
-            'PAYPAL': { patterns: ['PAYPAL', 'BRAINTREE'], confidence: 0.9 },
-            'CLOVER': { patterns: ['CLOVER'], confidence: 0.85 },
-            'TOAST': { patterns: ['TOAST'], confidence: 0.95 },
-            'EVO': { patterns: ['EVO PAYMENTS', 'EVO MERCHANT', 'PAYTRACE'], confidence: 0.9 },
-            'PAYSAFE': { patterns: ['PAYSAFE', 'NETELLER', 'SKRILL'], confidence: 0.9 },
-            'DHARMA': { patterns: ['DHARMA'], confidence: 0.95 },
-            'HELCIM': { patterns: ['HELCIM'], confidence: 0.95 },
-            'STAX': { patterns: ['STAX', 'FATTMERCHANT'], confidence: 0.95 },
-            'PAYMENT_DEPOT': { patterns: ['PAYMENT DEPOT'], confidence: 0.95 },
-            'GPI': { patterns: ['GPI', 'GLOBAL PAYMENTS INTEGRATED'], confidence: 0.9 }
+            // Major processors - patterns use regex with word boundaries to avoid false positives
+            'TSYS': { patterns: ['\\bTSYS\\b', '\\bCAYAN\\b', '\\bTRANSFIRST\\b', '\\bVITAL\\b'], confidence: 0.9, useRegex: true },
+            'FISERV': { patterns: ['\\bFISERV\\b', 'FIRST DATA', 'FIRSTDATA', '\\bCARDNET\\b', '\\bBAMS\\b', 'BANK OF AMERICA MERCHANT'], confidence: 0.9, useRegex: true },
+            'WORLDPAY': { patterns: ['\\bWORLDPAY\\b', '\\bVANTIV\\b', '\\bSPREEDLY\\b', 'FIS WORLDPAY'], confidence: 0.9, useRegex: true },
+            'ELAVON': { patterns: ['\\bELAVON\\b', 'US BANK MERCHANT', '\\bNOVA\\b'], confidence: 0.9, useRegex: true },
+            'GLOBAL': { patterns: ['GLOBAL PAYMENTS', '\\bHEARTLAND\\b', '\\bOPENEDGE\\b', 'ACTIVE NETWORK'], confidence: 0.9, useRegex: true },
+            'CHASE': { patterns: ['CHASE PAYMENTECH', '\\bPAYMENTECH\\b', 'JPMORGAN MERCHANT'], confidence: 0.9, useRegex: true },
+            'SQUARE': { patterns: ['\\bSQUARE\\b', 'BLOCK INC', '\\bSQ\\s'], confidence: 0.95, useRegex: true },
+            'STRIPE': { patterns: ['\\bSTRIPE\\b'], confidence: 0.95, useRegex: true },
+            'PAYPAL': { patterns: ['\\bPAYPAL\\b', '\\bBRAINTREE\\b'], confidence: 0.9, useRegex: true },
+            'CLOVER': { patterns: ['\\bCLOVER\\b'], confidence: 0.85, useRegex: true },
+            'TOAST': { patterns: ['\\bTOAST\\b'], confidence: 0.95, useRegex: true },
+            'EVO': { patterns: ['EVO PAYMENTS', 'EVO MERCHANT', '\\bPAYTRACE\\b'], confidence: 0.9, useRegex: true },
+            'PAYSAFE': { patterns: ['\\bPAYSAFE\\b', '\\bNETELLER\\b', '\\bSKRILL\\b'], confidence: 0.9, useRegex: true },
+            'DHARMA': { patterns: ['\\bDHARMA\\b'], confidence: 0.95, useRegex: true },
+            'HELCIM': { patterns: ['\\bHELCIM\\b'], confidence: 0.95, useRegex: true },
+            'STAX': { patterns: ['\\bSTAX\\b', '\\bFATTMERCHANT\\b'], confidence: 0.95, useRegex: true },
+            'PAYMENT_DEPOT': { patterns: ['PAYMENT DEPOT'], confidence: 0.95, useRegex: true },
+            'GPI': { patterns: ['\\bGPI\\b', 'GLOBAL PAYMENTS INTEGRATED'], confidence: 0.9, useRegex: true },
+
+            // NEW: Additional major processors
+            'WELLS_FARGO': {
+                patterns: ['WELLS FARGO MERCHANT', '\\bWFMS\\b', '\\bWFMERC\\b', 'WELLS FARGO BANK.*MERCHANT'],
+                indicators: ['\\bSEP\\d{3}\\b', 'WFMS STATEMENT', 'WELLS FARGO MERCHANT SERVICES'],
+                confidence: 0.9,
+                useRegex: true
+            },
+            'SHIFT4': {
+                patterns: ['\\bSHIFT4\\b', 'SHIFT4 PAYMENTS', '\\bHARBORTOUCH\\b', 'LIGHTHOUSE NETWORK', '\\bFUTUREPOS\\b', 'SHIFT 4'],
+                indicators: ['SHIFT4', 'HARBORTOUCH PAYMENTS'],
+                confidence: 0.9,
+                useRegex: true
+            },
+            'ADYEN': {
+                patterns: ['\\bADYEN\\b', 'ADYEN N\\.?V\\.?', 'ADYEN PAYMENTS', 'ADYEN BV'],
+                confidence: 0.95,
+                useRegex: true
+            },
+            'NORTH': {
+                patterns: ['NORTH PAYMENT', 'NORTH MERCHANT', 'NORTH PROCESSING', 'NCR PAYMENT', 'NCR MERCHANT', '\\bJETPAY\\b', 'NCR VOYIX', 'NCR SILVER'],
+                indicators: ['NCR PAYMENT SOLUTIONS', 'NORTH AMERICAN BANCARD'],
+                confidence: 0.85,
+                useRegex: true
+            },
+            'CLEARENT': {
+                patterns: ['\\bCLEARENT\\b', 'CLEARENT LLC', 'XPLOR TECHNOLOGIES', 'CLEARENT BY XPLOR'],
+                confidence: 0.95,
+                useRegex: true
+            },
+            'BLUEPAY': {
+                patterns: ['\\bBLUEPAY\\b', 'BLUEPAY PROCESSING', 'CLOVER CONNECT', 'BLUE PAY'],
+                confidence: 0.9,
+                useRegex: true
+            },
+            'TRANSACT': {
+                patterns: ['TRANSACT PAYMENT', 'TRANSACT MERCHANT', 'TRANSACT CAMPUS', 'TRANSACT HOLDINGS', 'TRANSACT PROCESSING'],
+                confidence: 0.85,
+                useRegex: true
+            },
+            'GRAVITY': {
+                patterns: ['GRAVITY PAYMENTS', 'GRAVITY MERCHANT', '\\bGRAVITYPAY\\b'],
+                confidence: 0.95,
+                useRegex: true
+            },
+            'NMI': {
+                patterns: ['\\bNMI\\b(?=.*GATEWAY|.*PAYMENT|.*MERCHANT|\\s)', 'NETWORK MERCHANTS', 'NETWORK MERCHANTS INC', '\\bUSAEPAY\\b', 'NMI GATEWAY'],
+                indicators: ['NETWORK MERCHANTS LLC', 'NMI TRANSACTION'],
+                confidence: 0.9,
+                useRegex: true
+            },
+            'MONERIS': {
+                patterns: ['\\bMONERIS\\b', 'MONERIS SOLUTIONS', 'MONERIS CANADA', 'MONERIS US'],
+                confidence: 0.95,
+                useRegex: true
+            }
         };
 
         function detectProcessor(text) {
@@ -1841,14 +2088,57 @@ PCI COMPLIANCE              $19.95
             let bestMatch = null;
             let bestScore = 0;
 
+            // Helper function to test pattern (regex or simple string)
+            function testPattern(pattern, text, useRegex) {
+                if (useRegex) {
+                    try {
+                        const regex = new RegExp(pattern, 'i');
+                        return regex.test(text);
+                    } catch (e) {
+                        // Fallback to includes if regex is invalid
+                        return text.includes(pattern);
+                    }
+                }
+                return text.includes(pattern);
+            }
+
+            // Helper function to calculate effective pattern length for scoring
+            // (removes regex metacharacters from length calculation)
+            function getPatternLength(pattern) {
+                return pattern.replace(/\\[bsdwBSDW]|\[\^?\]?[^\]]*\]|\(.*?\)|\?|\*|\+|\{.*?\}/g, '').length;
+            }
+
             for (const [processor, config] of Object.entries(PROCESSOR_PATTERNS)) {
+                let matchFound = false;
+                let longestMatchLength = 0;
+
+                // Check main patterns
                 for (const pattern of config.patterns) {
-                    if (upperText.includes(pattern)) {
-                        const score = config.confidence * (pattern.length / 10);
-                        if (score > bestScore) {
-                            bestScore = score;
-                            bestMatch = processor;
+                    if (testPattern(pattern, upperText, config.useRegex)) {
+                        matchFound = true;
+                        const patternLen = getPatternLength(pattern);
+                        if (patternLen > longestMatchLength) {
+                            longestMatchLength = patternLen;
                         }
+                    }
+                }
+
+                // Check processor-specific indicators for bonus confidence
+                let indicatorBonus = 0;
+                if (config.indicators && matchFound) {
+                    for (const indicator of config.indicators) {
+                        if (testPattern(indicator, upperText, true)) {
+                            indicatorBonus += 0.05; // Small bonus for each matched indicator
+                        }
+                    }
+                }
+
+                if (matchFound) {
+                    // Score based on confidence, pattern length, and indicator matches
+                    const score = (config.confidence + indicatorBonus) * (longestMatchLength / 10);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMatch = processor;
                     }
                 }
             }
@@ -1864,7 +2154,8 @@ PCI COMPLIANCE              $19.95
 
                 document.getElementById('processorBadge').classList.remove('hidden');
                 document.getElementById('headerProcessor').textContent = bestMatch;
-                document.getElementById('processorSelect').value = bestMatch;
+                // Note: This sets the detected CURRENT processor, not the GPI platform selection
+                // The gpiProcessorSelect dropdown is for selecting which GPI platform to use
             }
 
             return bestMatch;
@@ -1977,7 +2268,10 @@ PCI COMPLIANCE              $19.95
             const result = { volume: 0, fees: 0, transactions: 0 };
             const upperText = text.toUpperCase();
 
-            // Enhanced patterns for total sales/volume - more comprehensive
+            // ============================================================
+            // ENHANCED VOLUME PATTERNS (Feb 2026 Update)
+            // Added: "TOTAL SALES" without $, table formats, month comparisons
+            // ============================================================
             const volumePatterns = [
                 // Explicit total volume/sales patterns
                 /(?:TOTAL\s+)?(?:SALES|VOLUME|GROSS\s+SALES|NET\s+SALES|CARD\s+SALES|BANKCARD\s+SALES|TOTAL\s+AMOUNT)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
@@ -1987,23 +2281,112 @@ PCI COMPLIANCE              $19.95
                 /PROCESSED\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /MONTHLY\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 // Year-over-year patterns (e.g., "Apr-22 $120,700")
-                /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s-]?\d{2,4}\s+\$?([\d,]+\.?\d*)/gi
+                /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s-]?\d{2,4}\s+\$?([\d,]+\.?\d*)/gi,
+
+                // NEW: "TOTAL SALES" without dollar sign (common in statement summaries)
+                /TOTAL\s+SALES[\s\.:=]+(\d[\d,]*\.?\d*)/gi,
+
+                // NEW: Colon-separated patterns like "Volume: 120,700.00"
+                /(?:VOLUME|SALES|AMOUNT)[\s]*:[\s]*([\d,]+\.?\d*)/gi,
+
+                // NEW: Table-format volumes (right-aligned numbers after label)
+                /(?:TOTAL|GROSS|NET)\s+(?:VOLUME|SALES|AMOUNT)\s{2,}([\d,]+\.?\d*)/gi,
+
+                // NEW: Tab-separated format (common in PDF exports)
+                /(?:TOTAL|GROSS|NET)\s+(?:VOLUME|SALES)\t+([\d,]+\.?\d*)/gi,
+
+                // NEW: Month-over-month comparison patterns
+                /(?:CURRENT|THIS)\s+(?:MONTH|PERIOD)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                /(?:PREVIOUS|LAST|PRIOR)\s+(?:MONTH|PERIOD)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+
+                // NEW: Processor-specific volume formats
+                // Wells Fargo format
+                /WF[\s\-]?(?:TOTAL|GROSS)\s+(?:VOLUME|SALES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                // Elavon format
+                /ELAVON[\s\-]?(?:VOLUME|SALES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                // TSYS format
+                /TSYS[\s\-]?(?:TOTAL|NET)\s+(?:VOLUME|SALES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+
+                // NEW: Summary section patterns
+                /SUMMARY[\s\S]*?(?:TOTAL|GROSS)\s+(?:VOLUME|SALES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                /STATEMENT\s+SUMMARY[\s\S]*?([\d,]+\.?\d*)\s*(?:TOTAL|VOLUME|SALES)/gi,
+
+                // NEW: Card brand totals (combine for total volume)
+                /(?:V\/MC|VISA\/MC|VISA\/MASTERCARD)\s+(?:TOTAL|VOLUME)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+
+                // NEW: Settlement/funding patterns
+                /(?:SETTLEMENT|FUNDING)\s+(?:TOTAL|AMOUNT)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                /NET\s+(?:SETTLEMENT|FUNDING)[\s\.:=\$]*([\d,]+\.?\d*)/gi
             ];
 
-            // Enhanced patterns for total fees
+            // ============================================================
+            // ENHANCED FEE TOTAL PATTERNS (Feb 2026 Update)
+            // Added: processor-specific formats, 2025-2026 fee types
+            // ============================================================
             const feePatterns = [
                 /(?:TOTAL\s+)?(?:FEES|CHARGES|PROCESSING\s+FEES|DISCOUNT|TOTAL\s+DEDUCTIONS)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /(?:AMOUNT\s+)?(?:DEDUCTED|CHARGED)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /TOTAL\s+(?:DUE|OWED|AMOUNT)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /(?:PROCESSING|SERVICE)\s+FEE(?:S)?[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
-                /NET\s+(?:FEES|CHARGES)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi
+                /NET\s+(?:FEES|CHARGES)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+
+                // NEW: Colon-separated patterns like "Fees: 1,234.56"
+                /(?:TOTAL\s+)?FEES[\s]*:[\s]*([\d,]+\.?\d*)/gi,
+
+                // NEW: Table-format fees (right-aligned numbers)
+                /(?:TOTAL|NET)\s+(?:FEES|CHARGES|DEDUCTIONS)\s{2,}([\d,]+\.?\d*)/gi,
+
+                // NEW: Tab-separated format
+                /(?:TOTAL|NET)\s+(?:FEES|CHARGES)\t+([\d,]+\.?\d*)/gi,
+
+                // NEW: Processor-specific fee totals
+                // Wells Fargo
+                /WF[\s\-]?(?:TOTAL|NET)\s+(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                // Elavon
+                /ELAVON[\s\-]?(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                // TSYS
+                /TSYS[\s\-]?(?:TOTAL|NET)\s+(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                // Fiserv/First Data
+                /(?:FISERV|FD|FIRSTDATA)[\s\-]?(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+
+                // NEW: 2025-2026 fee type totals
+                /MERCHANT\s+(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                /ACQUIRER\s+(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                /NETWORK\s+(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+
+                // NEW: Summary section patterns
+                /(?:FEES|CHARGES)\s+SUMMARY[\s\S]*?(?:TOTAL)[\s\.:=\$]*([\d,]+\.?\d*)/gi,
+                /STATEMENT\s+(?:FEES|CHARGES)[\s\.:=\$]*([\d,]+\.?\d*)/gi
             ];
 
-            // Enhanced patterns for transaction count
+            // ============================================================
+            // ENHANCED TRANSACTION COUNT PATTERNS (Feb 2026 Update)
+            // Added: table formats, processor-specific patterns
+            // ============================================================
             const txnPatterns = [
                 /(?:TOTAL\s+)?(?:TRANSACTIONS?|ITEMS?|COUNT|# OF TRANS|NBR\s+TRANS)[\s\.:=]+(\d[\d,]*)/gi,
                 /(\d[\d,]*)\s+(?:TRANSACTIONS?|ITEMS?|SALES)/gi,
-                /TRANS(?:ACTION)?\s*(?:COUNT|#|NBR)[\s\.:=]+(\d[\d,]*)/gi
+                /TRANS(?:ACTION)?\s*(?:COUNT|#|NBR)[\s\.:=]+(\d[\d,]*)/gi,
+
+                // NEW: Colon-separated patterns like "Transactions: 1,234"
+                /TRANSACTIONS?[\s]*:[\s]*(\d[\d,]*)/gi,
+
+                // NEW: Table-format transaction counts (right-aligned numbers)
+                /(?:TOTAL|BATCH)\s+(?:TRANSACTIONS?|ITEMS?|COUNT)\s{2,}(\d[\d,]*)/gi,
+
+                // NEW: Tab-separated format
+                /(?:TOTAL|BATCH)\s+(?:TRANSACTIONS?|ITEMS?)\t+(\d[\d,]*)/gi,
+
+                // NEW: Card brand transaction counts
+                /(?:VISA|MC|MASTERCARD|AMEX|DISCOVER)\s+(?:TRANSACTIONS?|COUNT)[\s\.:=]+(\d[\d,]*)/gi,
+
+                // NEW: Summary section patterns
+                /TRANSACTION\s+(?:SUMMARY|COUNT)[\s\.:=]+(\d[\d,]*)/gi,
+                /ITEMS?\s+PROCESSED[\s\.:=]+(\d[\d,]*)/gi,
+
+                // NEW: Processor-specific formats
+                /WF[\s\-]?(?:TRANSACTION|ITEM)\s+COUNT[\s\.:=]+(\d[\d,]*)/gi,
+                /TSYS[\s\-]?(?:TRANSACTIONS?|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi
             ];
 
             // Extract largest volume match (likely the total)
@@ -2098,44 +2481,122 @@ PCI COMPLIANCE              $19.95
             const fees = [];
             const lines = text.split('\n');
 
-            // Patterns to match fee lines
-            const feePattern = /([A-Za-z\s\/\-\.\&\#]+?)[\s\.\-:]+\$?([\d,]+\.?\d*)/g;
-            const negativePattern = /([A-Za-z\s\/\-\.\&\#]+?)[\s\.\-:]+\(?\$?([\d,]+\.?\d*)\)?[\s]*(?:CR|CREDIT)?/gi;
+            // ============================================================
+            // ENHANCED FEE PARSING PATTERNS (Feb 2026 Update)
+            // Handles: parentheses, numbers in names, processor-specific formats
+            // ============================================================
+
+            // Primary patterns - handles most fee formats including:
+            // - Fees with parentheses: "Auth Fee (Per Item)"
+            // - Fees with numbers in name: "Visa Level 2 Data Fee", "3D Secure Fee"
+            // - Fees with special chars: "MC-NABU Fee", "V/MC Assessment"
+            // - Processor codes: "SEP-1234", "WF-AUTH-001"
+            const feePatterns = [
+                // Standard fee pattern with enhanced character support (includes parentheses, numbers)
+                /([A-Za-z][A-Za-z0-9\s\/\-\.\&\#\(\)\']+?)[\s\.\-:]+\$?([\d,]+\.?\d*)/g,
+
+                // Fees with parenthetical descriptions: "Auth Fee (Per Item) $0.10"
+                /([A-Za-z][A-Za-z0-9\s\/\-\.\&\#]*\s*\([^)]+\))[\s\.\-:]+\$?([\d,]+\.?\d*)/g,
+
+                // Processor-specific formats (Wells Fargo SEP codes)
+                /(?:SEP|WF|WFMS)[\s\-]?([A-Z0-9\-]+(?:\s+[A-Za-z\s]+)?)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+
+                // Elavon format: "ELAVON-AUTH FEE $0.05"
+                /(?:ELAVON|ELV)[\s\-]?([A-Za-z0-9\s\-]+)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+
+                // Fiserv/First Data format: "FD-NETWORK FEE $0.02"
+                /(?:FISERV|FD|FIRSTDATA)[\s\-]?([A-Za-z0-9\s\-]+)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+
+                // TSYS format: "TSYS ACQ FEE $0.01"
+                /(?:TSYS|TS)[\s\-]?([A-Za-z0-9\s\-]+)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+
+                // Card brand specific: "MC-NABU FEE", "V-FANF", "VISA LEVEL 2"
+                /(?:MC|VISA|V|MASTERCARD|AMEX|AX|DISCOVER|DISC)[\s\-]([A-Za-z0-9\s\-]+(?:FEE|ASSESSMENT|CHARGE)?)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+
+                // 2025-2026 new fee types
+                /(?:ACQUIRER|ACQ)[\s\-]?([A-Za-z0-9\s\-]+FEE)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+                /(?:NETWORK|NET)[\s\-]?(ACCESS|INTEGRITY|ENHANCEMENT)\s*(?:FEE)?[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+                /(?:DIGITAL|TOKEN|TOKENIZATION)\s*([A-Za-z\s]*FEE)[\s\.\-:]+\$?([\d,]+\.?\d*)/gi,
+
+                // Table format: fee name followed by tab/spaces then amount
+                /^[\s]*([A-Za-z][A-Za-z0-9\s\/\-\.\&\#\(\)]+?)\t+\$?([\d,]+\.?\d*)[\s]*$/gm,
+
+                // Right-aligned amounts (common in PDF extracts)
+                /([A-Za-z][A-Za-z0-9\s\/\-\.\&\#\(\)]+?)\s{3,}\$?([\d,]+\.?\d*)[\s]*$/gm
+            ];
+
+            // Pattern for negative/credit amounts
+            const negativePattern = /([A-Za-z][A-Za-z0-9\s\/\-\.\&\#\(\)]+?)[\s\.\-:]+\(?\$?([\d,]+\.?\d*)\)?[\s]*(?:CR|CREDIT|-)?/gi;
+
+            // Multi-line fee description pattern (fee name on one line, amount on next)
+            const multiLinePattern = /^[\s]*([A-Za-z][A-Za-z0-9\s\/\-\.\&\#\(\)]+?)[\s]*$[\n\r]+^[\s]*\$?([\d,]+\.?\d*)[\s]*$/gm;
 
             for (const line of lines) {
                 if (!line.trim()) continue;
 
                 let match;
-                const testLine = line.replace(/,/g, '');
+                const testLine = line; // Keep commas for initial processing
 
-                // Try standard pattern
-                feePattern.lastIndex = 0;
-                while ((match = feePattern.exec(testLine)) !== null) {
-                    const name = match[1].trim();
-                    const amount = parseFloat(match[2].replace(/,/g, ''));
+                // Try each fee pattern
+                for (const feePattern of feePatterns) {
+                    feePattern.lastIndex = 0;
+                    while ((match = feePattern.exec(testLine)) !== null) {
+                        let name = match[1].trim();
+                        const amount = parseFloat(match[2].replace(/,/g, ''));
 
-                    if (name.length > 2 && amount > 0 && !isNaN(amount)) {
-                        const category = categorizeFee(name);
-                        fees.push({
-                            name: name.toUpperCase(),
-                            amount: amount,
-                            category: category.category,
-                            confidence: category.confidence,
-                            isHiddenFee: category.isHidden,
-                            hiddenInfo: category.hiddenInfo
-                        });
+                        // Clean up fee name
+                        name = name.replace(/[\s\.\-:]+$/, '').trim(); // Remove trailing separators
+                        name = name.replace(/\s+/g, ' '); // Normalize whitespace
+
+                        if (name.length > 2 && amount > 0 && !isNaN(amount)) {
+                            // Skip if this looks like a volume/total (too large for a fee)
+                            if (amount > 50000) continue;
+
+                            const category = categorizeFee(name);
+                            fees.push({
+                                name: name.toUpperCase(),
+                                amount: amount,
+                                category: category.category,
+                                confidence: category.confidence,
+                                isHiddenFee: category.isHidden,
+                                hiddenInfo: category.hiddenInfo
+                            });
+                        }
                     }
                 }
             }
 
-            // Deduplicate
-            const seen = new Set();
-            return fees.filter(fee => {
+            // Try multi-line pattern on full text
+            multiLinePattern.lastIndex = 0;
+            let multiMatch;
+            while ((multiMatch = multiLinePattern.exec(text)) !== null) {
+                let name = multiMatch[1].trim();
+                const amount = parseFloat(multiMatch[2].replace(/,/g, ''));
+
+                name = name.replace(/[\s\.\-:]+$/, '').trim();
+
+                if (name.length > 2 && amount > 0 && amount < 50000 && !isNaN(amount)) {
+                    const category = categorizeFee(name);
+                    fees.push({
+                        name: name.toUpperCase(),
+                        amount: amount,
+                        category: category.category,
+                        confidence: category.confidence,
+                        isHiddenFee: category.isHidden,
+                        hiddenInfo: category.hiddenInfo
+                    });
+                }
+            }
+
+            // Deduplicate - keep highest confidence version if same fee appears multiple times
+            const seen = new Map();
+            for (const fee of fees) {
                 const key = fee.name + fee.amount;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
+                if (!seen.has(key) || seen.get(key).confidence < fee.confidence) {
+                    seen.set(key, fee);
+                }
+            }
+            return Array.from(seen.values());
         }
 
         // ============================================================
@@ -3079,6 +3540,7 @@ PCI COMPLIANCE              $19.95
             updateSavingsDisplay();
             updateQuickStats();
             renderFeeTable();
+            detectHiddenFees();
             generateCallScript();
         }
 
