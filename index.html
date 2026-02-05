@@ -3147,7 +3147,72 @@ PCI COMPLIANCE              $19.95
             // Annual/Stealth Increases
             { pattern: /ANNUAL\s*RATE\s*ADJUSTMENT/i, confidence: 0.95 },
             { pattern: /PRICING\s*UPDATE\s*FEE/i, confidence: 0.95 },
-            { pattern: /EFFECTIVE\s*RATE\s*CHANGE/i, confidence: 0.90 }
+            { pattern: /EFFECTIVE\s*RATE\s*CHANGE/i, confidence: 0.90 },
+
+            // === NEW: Real Statement Deep-Dive Patterns (Feb 5, 2026) ===
+            // CardConnect/Fiserv - Service Charges are CONTROLLABLE
+            { pattern: /^CARDPOINTE\s*PLATFORM\s*FEE$/i, confidence: 0.95 },
+            { pattern: /VISA\s*(DEBIT\s*)?SALES\s*DISCOUNT/i, confidence: 0.95 },
+            { pattern: /MASTERCARD\s*(DEBIT\s*)?SALES\s*DISCOUNT/i, confidence: 0.95 },
+            { pattern: /DISCOVER\s*(DEBIT\s*)?SALES\s*DISCOUNT/i, confidence: 0.95 },
+
+            // WorldPay-specific markups
+            { pattern: /MONTHLY\s*DISCOUNT\s*ADJUSTMENT/i, confidence: 0.95 },
+            { pattern: /NETWORK\s*&\s*PROCESSOR\s*ACCESS\s*FEE/i, confidence: 0.95 },
+            { pattern: /PROCESSOR\s*TRANSACTION\s*RISK\s*FEE/i, confidence: 0.95 },
+            { pattern: /SAFERPAYMENTS\s*BASIC/i, confidence: 0.95 },
+            { pattern: /PCI\s*NON[\s\-]*VALIDATION(\s*PER\s*ITEM)?/i, confidence: 0.95 },
+            { pattern: /BATCH\s*SETTLE\s*FEE/i, confidence: 0.95 },
+            { pattern: /CHARGEBACK\s*SERVICE\s*FEE/i, confidence: 0.95 },
+            { pattern: /(MASTERCARD|VISA|DISCOVER|DISCOVERDEBIT|MCDEBIT|MCDEBITCAP|VISADEBIT|VISADEBITCAP)\s*Processing\s*Fee$/i, confidence: 0.95 },
+
+            // Heartland/Passport - HPS markups
+            { pattern: /VS\s*Discount\s*Fee/i, confidence: 0.95 },
+            { pattern: /MC\s*Discount\s*Fee/i, confidence: 0.95 },
+            { pattern: /DS\s*Discount\s*Fee/i, confidence: 0.95 },
+            { pattern: /American\s*Express\s*Discount\s*Fee/i, confidence: 0.95 },
+            { pattern: /(Visa|MC|Discover|American\s*Express)\s*Transaction\s*Fee/i, confidence: 0.95 },
+            { pattern: /Service\s*&\s*Regulatory\s*Mandate/i, confidence: 0.95 },
+            { pattern: /Heartland\s*Analytics/i, confidence: 0.90 },
+
+            // Paysafe/Riverside - DISC 1 is always markup
+            { pattern: /^DISC\s*1$/i, confidence: 0.95 },
+            { pattern: /^DATAWIRE$/i, confidence: 0.95 },
+            { pattern: /^LOCATION\s*FEE$/i, confidence: 0.95 },
+            { pattern: /^RETURNS$/i, confidence: 0.90 },
+            { pattern: /^AVS\s*POS$/i, confidence: 0.85 },
+
+            // === NEW: First Data/Fiserv Tiered Pricing Patterns (Feb 5, 2026) ===
+            // First Data uses QUAL/MID-QUAL/NON-QUAL tiers - all are processor markup
+            { pattern: /(VISA|MC|MASTERCARD|DISCOVER)\s*(DEBIT\s*)?(MID[\s\-]?QUAL|NON[\s\-]?QUAL)?\s*SALES\s*DISC(OUNT)?\s*\.\d{4}/i, confidence: 0.95 },
+            { pattern: /(VISA|MC|MASTERCARD|DISCOVER|VI|AMEX)\s*(DEBIT\s*)?(MID[\s\-]?QUAL|NON[\s\-]?QUAL)?\s*(SALES\s*)?TRANS(ACTION)?\s*FEE\s*\d+\s*TRANS/i, confidence: 0.95 },
+            { pattern: /CLOVER\s*SECURITY\s*PLUS\s*MONTHLY/i, confidence: 0.95 },
+            { pattern: /MONTHLY\s*FUNDING\s*ADVANTAGE/i, confidence: 0.95 },
+            { pattern: /BUSINESS\s*ADVANTAGE\s*PACKAGE/i, confidence: 0.95 },
+            { pattern: /AVS\s*WATS\s*AUTHORIZATION\s*FEE/i, confidence: 0.95 },
+            { pattern: /BATCH\s*SETTLEMENT\s*FEE\s*\d+\s*TRANS/i, confidence: 0.95 },
+
+            // === NEW: EVO/Omega Processor Fee Patterns (Feb 5, 2026) ===
+            // EVO uses numeric codes - 6xxx/7xxx are typically controllable
+            { pattern: /^[67]\d{3}\s+.*(BATCH|PCI|GATEWAY|FUNDING|SERVICE|VPN|VERISIGN|COMPLIANCE)/i, confidence: 0.90 },
+            { pattern: /ACCELERATED\s*FUNDING/i, confidence: 0.95 },
+            { pattern: /BANK\s*SERVICE\s*FEE/i, confidence: 0.95 },
+            { pattern: /CHGBK\s*PAPER\s*NOTIFICATION/i, confidence: 0.95 },
+            { pattern: /GATEWAY\s*ACCESS\s*FEE/i, confidence: 0.95 },
+            { pattern: /GBL\s*(AX|MC|VS)\s*(VERISIGN|VPN)/i, confidence: 0.95 },
+            { pattern: /GLB\s*NON\s*SPECIFIC\s*AUTH/i, confidence: 0.95 },
+            { pattern: /PCI\s*COMPLIANCE\s*FEE/i, confidence: 0.95 },
+            // EVO Settlement/Discount markup section (same codes as Pass Through but flat markup)
+            { pattern: /^[0-9]{4}\s+(MC|VS).*0\.2000%/i, confidence: 0.90 },
+
+            // === NEW: Heartland/TSYS Processor Fee Patterns (Feb 5, 2026) ===
+            { pattern: /NON[\s\-]?EMV\s*(RISK\s*ASSESSMENT|PROGRAM)\s*FEE/i, confidence: 0.95 },
+            { pattern: /TRANSACTION\/NETWORK\s*ACCESS\s*FEE/i, confidence: 0.95 },
+            { pattern: /CE:\s*SUITE\s*\(INTELLIGENCE\)/i, confidence: 0.95 },
+            { pattern: /TRANSLINK\s*MONTHLY\s*FEE/i, confidence: 0.95 },
+            { pattern: /\$\d+,?\d*\s*BREACH\s*COVERAGE\s*MONTHLY/i, confidence: 0.95 },
+            { pattern: /NON\s*RECEIPT\s*OF\s*PCI\s*VALIDATION/i, confidence: 0.95 },
+            { pattern: /Base\s*P\/I\s*Discount/i, confidence: 0.95 }
         ];
 
         const PASSTHROUGH_PATTERNS = [
@@ -3358,7 +3423,77 @@ PCI COMPLIANCE              $19.95
             { pattern: /MID[\s-]*QUAL(?:IFIED)?\s*(?:RATE|DISC)/i, confidence: 0.80 },
             { pattern: /NON[\s-]*QUAL(?:IFIED)?\s*(?:RATE|DISC)/i, confidence: 0.80 },
             { pattern: /EIRF\s*(?:SURCHARGE|DOWNGRADE)/i, confidence: 0.85 },
-            { pattern: /ERR\s*SURCHARGE/i, confidence: 0.85 }
+            { pattern: /ERR\s*SURCHARGE/i, confidence: 0.85 },
+
+            // === NEW: Real Statement Deep-Dive Patterns (Feb 5, 2026) ===
+            // CardConnect/Fiserv - Interchange charges (marked "Interchange charges" in statement)
+            { pattern: /^VI[\s\-]+(REST\s*SIG|CPS|REGULATED|BUSINESS|BUS|CORP|PURCHASING|ELECTRONIC|PRIVATE|INTER|SUPER|NON\s*QUAL|EIRF)/i, confidence: 0.95 },
+            { pattern: /^MC[\s\-]+(ENHANCED|DOMESTIC|MERIT|FOREIGN|INT\s*SPR|PREM|WORLDCARD|WORLD\s*ELITE|HIGH\s*VAL|RESTAURANT|SMALL|REG|CORP|COM|BUS|T&E)/i, confidence: 0.95 },
+            { pattern: /^DSCVR\s+(PSL|COMML)/i, confidence: 0.95 },
+            { pattern: /^DS\s+(COMMERCIAL|PSL)/i, confidence: 0.95 },
+
+            // Heartland/Passport - Pass-thru section fees
+            { pattern: /^VS\s*(CR|DB)\s+(Bus|CPS|Intl|Sig|Standard|Super|EIRF)/i, confidence: 0.95 },
+            { pattern: /^MC\s*(CR|DB)\s+(Foreign|Intl|Lodging|World|Merit|Regulated)/i, confidence: 0.95 },
+            { pattern: /^Amex\s*[\-\s]*(Lodging|Retail)\s*Tier/i, confidence: 0.95 },
+            { pattern: /^DS\s*(CR|DB)\s+(Commercial|PSL)/i, confidence: 0.95 },
+
+            // Paysafe/Riverside - Interchange (named "INTERCHANGE" in statement)
+            { pattern: /^INTERCHANGE$/i, confidence: 0.95 },
+            { pattern: /^DUES\s*&?\s*ASSESSMENTS$/i, confidence: 0.95 },
+            { pattern: /^(NABU|BIN\s*ICA|KILOBYTE|LICENSE\s*RATE|ACQ\s*SUPPORT|CROSS\s*BORDER)\s*FEE/i, confidence: 0.95 },
+            { pattern: /^(FIXED\s*NETWORK|ACQR\s*PROCESSOR|FILE\s*TRANSMISSION|ACQ\s*ISA|ACQ\s*DATA\s*PROC)\s*FEE/i, confidence: 0.95 },
+            { pattern: /^(NETWORK\s*FEE|PROGRAM\s*FEES)$/i, confidence: 0.95 },
+            { pattern: /^DISCOVER\s*PROMO$/i, confidence: 0.90 },
+
+            // WorldPay - Interchange section fees
+            { pattern: /^VS\s+(BUSINESS|CPS|CORPORATE|EIRF|INTERNATIONAL|ISSUER|NON\s*QUALIFIED|PREPAID|PURCHASING|RESTAURANT|SIGNATURE)/i, confidence: 0.95 },
+            { pattern: /^MC\s+(BUSINESS|DC|ENHANCED|INTERREGIONAL|MERIT|RESTAURANT|SMALL|T&E|WORLD)/i, confidence: 0.95 },
+            { pattern: /^DS\s+(COMMERCIAL|PSL)/i, confidence: 0.95 },
+
+            // Network Assessment Fees (all processors)
+            { pattern: /(VISA|MASTERCARD|MC|DISCOVER|DS)\s*ASSESSMENT/i, confidence: 0.95 },
+            { pattern: /(VISA|MC)\s*(CREDIT|DEBIT)\s*ASSESSMENT/i, confidence: 0.95 },
+
+            // === NEW: First Data/Fiserv Network Fee Patterns (Feb 5, 2026) ===
+            { pattern: /(VISA|MASTERCARD|DISCOVER)\s*ACCESS\s*FEE\s*\d+\s*TRANS/i, confidence: 0.95 },
+            { pattern: /MC\s*LICENSE\s*VOLUME\s*FEE/i, confidence: 0.95 },
+            { pattern: /MC\s*MONTHLY\s*LOCATION\s*FEE/i, confidence: 0.95 },
+            { pattern: /VI\s*BASE\s*II\s*(SYSTEM\s*FILE|CR\s*VCHER)\s*FEE/i, confidence: 0.95 },
+            { pattern: /VISA\s*NETWORK\s*FEE\s*(CP|CNP)/i, confidence: 0.95 },
+            { pattern: /VISA\s*INTL\s*SERVICE\s*FEE/i, confidence: 0.95 },
+            { pattern: /VI\s*TRANSACTION\s*INTEGRITY\s*FEE/i, confidence: 0.95 },
+            { pattern: /US\s*CROSS\s*BORDER\s*FEE/i, confidence: 0.95 },
+            { pattern: /VISA\s*ASSESSMENT\s*FEE\s*(CR|DB)/i, confidence: 0.95 },
+            { pattern: /MC\s*ASSESSMNT\s*TRAN\s*AMT/i, confidence: 0.95 },
+
+            // === NEW: EVO/Omega Network Fee Patterns (Feb 5, 2026) ===
+            // EVO 8xxx codes are typically assessments/network fees
+            { pattern: /^8\d{3}\s+.*(ASSESSMENT|NETWORK|ACCESS|DIGITAL|CVC2|FANF|LICENSE)/i, confidence: 0.95 },
+            { pattern: /ASSC\s*CARD\s*ACCEPT\s*&\s*LICENSE\s*FEE/i, confidence: 0.95 },
+            { pattern: /CNP\s*FANF\/?\s*LIC\s*FEE/i, confidence: 0.95 },
+            { pattern: /CP\s*FANF\/?\s*LIC\s*FEE/i, confidence: 0.95 },
+            { pattern: /MC\s*ASSESSMENTS\s*(LARGE\s*TICKET\s*)?\+?\$?\d/i, confidence: 0.95 },
+            { pattern: /MC\s*CVC2\s*FEE/i, confidence: 0.95 },
+            { pattern: /MC\s*DIGITAL\s*ENHANCEMENT/i, confidence: 0.95 },
+            { pattern: /MC\s*NETWORK\s*ACCESS\s*&\s*BRAND\s*USAGE/i, confidence: 0.95 },
+            { pattern: /VISA\s*ACQUIRER\s*PROCESSING\s*FEE\s*[\-\s]*(CREDIT|SIG\s*DEBIT)/i, confidence: 0.95 },
+            { pattern: /VISA\s*ASSESSMENTS\s*\((CREDIT|DEBIT)\s*CARDS\)/i, confidence: 0.95 },
+            { pattern: /VISA\s*NETWORK\s*ACCESS\s*FEE/i, confidence: 0.95 },
+
+            // === NEW: Heartland/TSYS Network Fee Patterns (Feb 5, 2026) ===
+            // Heartland uses (24) suffix for interchange categories
+            { pattern: /^(VS|MC|DS|AM)\s+.+\s*\(24\)$/i, confidence: 0.95 },
+            { pattern: /AXP\s*ASSESSMENTS/i, confidence: 0.95 },
+            { pattern: /DISC\/PAYPAL\s*ASSESSMENTS/i, confidence: 0.95 },
+            { pattern: /FIXED\s*ACQUIRER\s*NETWORK\s*FEE\s*\(FANF\)/i, confidence: 0.95 },
+            { pattern: /FEES\s*FOR\s*ACCESS\s*TO\s*CARD\s*BRAND\s*SERVICES/i, confidence: 0.95 },
+            { pattern: /AXP\s*(ACCESS|NON-?SWIPED|SYSTEM\s*PROCESSING)\s*FEE/i, confidence: 0.95 },
+            { pattern: /DISCOVER\s*DATA\s*USAGE\/NETWORK\s*FEE/i, confidence: 0.95 },
+            { pattern: /ASSOC\s*KILOBYTE\/BASE\s*II\s*FEES/i, confidence: 0.95 },
+            { pattern: /MC\s*NABU\/LICENSE\/DIGITAL\s*ENABLEMENT\s*FEE/i, confidence: 0.95 },
+            { pattern: /VISA\s*ASSOC\s*APF\s*FEE\s*&\s*CREDIT\s*VOUCHER\s*FEE/i, confidence: 0.95 },
+            { pattern: /VISA\s*INTEGRITY\s*FEE/i, confidence: 0.95 }
         ];
 
         // ============================================================
