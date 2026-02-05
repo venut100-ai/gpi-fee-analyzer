@@ -925,6 +925,7 @@ PCI COMPLIANCE              $19.95
                             <th>Type</th>
                             <th class="text-right">Amount</th>
                             <th class="text-center">Category</th>
+                            <th class="text-center">Confidence</th>
                             <th class="text-center">Benchmark</th>
                         </tr>
                     </thead>
@@ -2849,16 +2850,23 @@ PCI COMPLIANCE              $19.95
                             // Skip if this looks like a volume/total (too large for a fee)
                             if (amount > 50000) continue;
 
-                            const category = categorizeFee(name);
+                            // Use enhanced Universal Fee Recognition Engine
+                            const category = universalCategorizeFee(name, {
+                                lineText: testLine,
+                                amount: amount
+                            });
                             const feeType = determineFeeType(name);
                             fees.push({
                                 name: name.toUpperCase(),
                                 amount: amount,
                                 category: category.category,
-                                feeType: feeType,  // NEW: Fee bucket type
+                                feeType: feeType,
                                 confidence: category.confidence,
-                                isHiddenFee: category.isHidden,
-                                hiddenInfo: category.hiddenInfo
+                                isHiddenFee: category.isHidden || false,
+                                hiddenInfo: category.hiddenInfo,
+                                // NEW: Track categorization source for UI feedback
+                                categorizationSource: category.source || 'pattern',
+                                matchedPattern: category.matchedPattern || null
                             });
                         }
                     }
@@ -2875,16 +2883,23 @@ PCI COMPLIANCE              $19.95
                 name = name.replace(/[\s\.\-:]+$/, '').trim();
 
                 if (name.length > 2 && amount > 0 && amount < 50000 && !isNaN(amount)) {
-                    const category = categorizeFee(name);
+                    // Use enhanced Universal Fee Recognition Engine
+                    const category = universalCategorizeFee(name, {
+                        lineText: text,
+                        amount: amount
+                    });
                     const feeType = determineFeeType(name);
                     fees.push({
                         name: name.toUpperCase(),
                         amount: amount,
                         category: category.category,
-                        feeType: feeType,  // NEW: Fee bucket type
+                        feeType: feeType,
                         confidence: category.confidence,
-                        isHiddenFee: category.isHidden,
-                        hiddenInfo: category.hiddenInfo
+                        isHiddenFee: category.isHidden || false,
+                        hiddenInfo: category.hiddenInfo,
+                        // NEW: Track categorization source for UI feedback
+                        categorizationSource: category.source || 'pattern',
+                        matchedPattern: category.matchedPattern || null
                     });
                 }
             }
@@ -5181,6 +5196,9 @@ PCI COMPLIANCE              $19.95
                     <option value="REVIEW" ${fee.category === 'REVIEW' ? 'selected' : ''}>⚠️ Review</option>
                 `;
 
+                // Generate confidence badge with source indicator
+                const confidenceBadge = getConfidenceBadge(fee);
+
                 tbody.innerHTML += `
                     <tr class="fee-row ${rowClass}">
                         <td>
@@ -5194,15 +5212,71 @@ PCI COMPLIANCE              $19.95
                                 ${categoryOptions}
                             </select>
                         </td>
+                        <td class="text-center">${confidenceBadge}</td>
                         <td class="text-center">${getBenchmarkBadge(fee)}</td>
                     </tr>
                 `;
             }
         }
 
+        // Generate confidence badge with source indicator and color coding
+        function getConfidenceBadge(fee) {
+            const confidence = fee.confidence || 0.5;
+            const source = fee.categorizationSource || 'pattern';
+            const pct = Math.round(confidence * 100);
+
+            // Source icons and labels
+            const sourceInfo = {
+                'learned': { icon: '🧠', label: 'User Verified', color: '#059669' },
+                'official interchange': { icon: '📜', label: 'Official Interchange', color: '#2563eb' },
+                'linguistic analysis': { icon: '📝', label: 'Keyword Analysis', color: '#7c3aed' },
+                'rate heuristics': { icon: '📊', label: 'Rate Analysis', color: '#d97706' },
+                'definitive pattern': { icon: '✓', label: 'Definitive Match', color: '#059669' },
+                'default controllable': { icon: '❓', label: 'Unknown Fee', color: '#dc2626' },
+                'pattern': { icon: '🔍', label: 'Pattern Match', color: '#6b7280' },
+                'exclusion rule': { icon: '⚡', label: 'Rule Override', color: '#0891b2' }
+            };
+
+            const info = sourceInfo[source] || sourceInfo['pattern'];
+
+            // Color based on confidence level
+            let badgeColor, textColor;
+            if (confidence >= 0.9) {
+                badgeColor = '#dcfce7'; textColor = '#166534'; // Green - High confidence
+            } else if (confidence >= 0.75) {
+                badgeColor = '#dbeafe'; textColor = '#1e40af'; // Blue - Good confidence
+            } else if (confidence >= 0.6) {
+                badgeColor = '#fef3c7'; textColor = '#92400e'; // Yellow - Medium confidence
+            } else {
+                badgeColor = '#fee2e2'; textColor = '#991b1b'; // Red - Low confidence
+            }
+
+            return `
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                    <span class="badge" style="background: ${badgeColor}; color: ${textColor}; font-weight: 600; font-size: 0.8rem;">
+                        ${pct}%
+                    </span>
+                    <span title="${info.label}" style="font-size: 0.7rem; color: ${info.color}; cursor: help;">
+                        ${info.icon} ${info.label.split(' ')[0]}
+                    </span>
+                </div>
+            `;
+        }
+
         function updateCategory(index, newCategory) {
-            currentState.fees[index].category = newCategory;
-            currentState.fees[index].confidence = 1.0; // User override
+            const fee = currentState.fees[index];
+            const previousCategory = fee.category;
+
+            // Update fee data
+            fee.category = newCategory;
+            fee.confidence = 1.0; // User override = 100% confidence
+            fee.categorizationSource = 'learned'; // Mark as user-verified
+
+            // Learn from user correction (Option 5: Crowdsourced Learning)
+            if (previousCategory !== newCategory) {
+                learnPattern(fee.name, newCategory, 'user_correction');
+                console.log(`📚 Learned: "${fee.name}" → ${newCategory} (user correction)`);
+            }
 
             calculateTotals();
             updateSavingsDisplay();
