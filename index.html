@@ -2434,79 +2434,296 @@ PCI COMPLIANCE              $19.95
             ];
 
             // ============================================================
-            // ENHANCED TRANSACTION COUNT PATTERNS (Feb 2026 Update)
-            // Added: table formats, processor-specific patterns
+            // ENHANCED TRANSACTION COUNT PATTERNS (Feb 2026 - Comprehensive)
+            // Patterns from analysis of 30+ processor statement formats
             // ============================================================
             const txnPatterns = [
                 // CardConnect format: "Total 516 $6,467.66" - capture 516
-                /TOTAL\s+(\d+)\s+\$[\d,]+\.\d{2}/gi,
+                /TOTALS?\s+(\d+)\s+\$[\d,]+\.\d{2}/gi,
+
+                // Heartland/Passport format: "Totals 170 $37,130.80" - capture 170
+                /TOTALS?\s+(\d[\d,]*)\s+\$[\d,]+/gi,
 
                 // Items count in table: "Items Amount" rows with "516" as items
                 /(?:ITEMS?|COUNT)\s+(\d+)\s+\$[\d,]+/gi,
 
-                /(?:TOTAL\s+)?(?:TRANSACTIONS?|ITEMS?|COUNT|# OF TRANS|NBR\s+TRANS)[\s\.:=]+(\d[\d,]*)/gi,
+                /(?:TOTALS?\s+)?(?:TRANSACTIONS?|ITEMS?|COUNT|# OF TRANS|NBR\s+TRANS)[\s\.:=]+(\d[\d,]*)/gi,
                 /(\d[\d,]*)\s+(?:TRANSACTIONS?|ITEMS?|SALES)/gi,
                 /TRANS(?:ACTION)?\s*(?:COUNT|#|NBR)[\s\.:=]+(\d[\d,]*)/gi,
 
-                // NEW: Colon-separated patterns like "Transactions: 1,234"
+                // Colon-separated patterns like "Transactions: 1,234"
                 /TRANSACTIONS?[\s]*:[\s]*(\d[\d,]*)/gi,
 
-                // NEW: Table-format transaction counts (right-aligned numbers)
-                /(?:TOTAL|BATCH)\s+(?:TRANSACTIONS?|ITEMS?|COUNT)\s{2,}(\d[\d,]*)/gi,
+                // Table-format transaction counts (right-aligned numbers)
+                /(?:TOTALS?|BATCH)\s+(?:TRANSACTIONS?|ITEMS?|COUNT)\s{2,}(\d[\d,]*)/gi,
 
-                // NEW: Tab-separated format
-                /(?:TOTAL|BATCH)\s+(?:TRANSACTIONS?|ITEMS?)\t+(\d[\d,]*)/gi,
+                // Tab-separated format
+                /(?:TOTALS?|BATCH)\s+(?:TRANSACTIONS?|ITEMS?)\t+(\d[\d,]*)/gi,
 
-                // NEW: Card brand transaction counts
+                // Card brand transaction counts
                 /(?:VISA|MC|MASTERCARD|AMEX|DISCOVER)\s+(?:TRANSACTIONS?|COUNT)[\s\.:=]+(\d[\d,]*)/gi,
 
-                // NEW: Summary section patterns
+                // Summary section patterns
                 /TRANSACTION\s+(?:SUMMARY|COUNT)[\s\.:=]+(\d[\d,]*)/gi,
                 /ITEMS?\s+PROCESSED[\s\.:=]+(\d[\d,]*)/gi,
 
-                // NEW: Processor-specific formats
+                // NEW: Processor-specific formats from comprehensive bot research
+                /Grand\s+Totals\s+(\d+)\s+\$/gi, // Nationwide
+                /Deposit\s+Totals?\s+(\d+)/gi, // BB&T/TSYS
+                /TOTAL\s+(\d+)\s+\$[\d,]+\.\d{2}\s+\d+/gi, // First American (sales count)
+                /Transaction\s+Fee\s+(\d+)/gi, // Storable
+                /TOTAL\s+TRANS[\s\.:=]+(\d[\d,]*)/gi, // GPI
+                /Number\s+of\s+Sales[\s\.:=]+(\d[\d,]*)/gi, // EVO
+                /\*\*\s+(\d[\d,]*)\s+[\d,]+\.?\d{2}/gi, // BB&T plan summary
+                /Sale\s+Items[\s\.:=]+(\d[\d,]*)/gi, // Nationwide
+
+                // Bot Research: Additional processor-specific formats
+                /TOTAL\s+CARD\s+TRANSACTIONS[\s\.:=]+(\d[\d,]*)/gi, // Toast/Clover
+                /PAYMENTS\s+PROCESSED[\s\.:=]+(\d[\d,]*)/gi, // Square/Stripe
+                /ORDERS?\s+COUNT[\s\.:=]+(\d[\d,]*)/gi, // Lightspeed/ShopKeep
+                /BATCHES?\s+COUNT[\s\.:=]+(\d[\d,]*)/gi, // Generic batch counter
+                /AUTHORIZATION\s+COUNT[\s\.:=]+(\d[\d,]*)/gi, // Auth count
+                /APPROVED\s+(?:TRANS(?:ACTION)?S?|COUNT)[\s\.:=]+(\d[\d,]*)/gi, // Approved txns
+                /DECLINED\s+(?:TRANS(?:ACTION)?S?|COUNT)[\s\.:=]+(\d[\d,]*)/gi, // Declined (for reference)
+                /REFUND\s+(?:COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi, // Refund count
+                /VOID\s+(?:COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi, // Void count
+                /CHARGEBACKS?\s+COUNT[\s\.:=]+(\d[\d,]*)/gi, // Chargeback count
+
+                // Card brand specific transaction counts
+                /VISA\s+(?:TRANS(?:ACTION)?S?|COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi,
+                /(?:MC|MASTERCARD)\s+(?:TRANS(?:ACTION)?S?|COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi,
+                /AMEX\s+(?:TRANS(?:ACTION)?S?|COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi,
+                /DISCOVER\s+(?:TRANS(?:ACTION)?S?|COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi,
+                /DEBIT\s+(?:TRANS(?:ACTION)?S?|COUNT|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi,
+
+                // Processor-specific formats
                 /WF[\s\-]?(?:TRANSACTION|ITEM)\s+COUNT[\s\.:=]+(\d[\d,]*)/gi,
-                /TSYS[\s\-]?(?:TRANSACTIONS?|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi
+                /TSYS[\s\-]?(?:TRANSACTIONS?|ITEMS?)[\s\.:=]+(\d[\d,]*)/gi,
+                /FISERV\s+(?:TRANS(?:ACTION)?S?|COUNT)[\s\.:=]+(\d[\d,]*)/gi,
+                /ELAVON\s+(?:TRANS(?:ACTION)?S?|COUNT)[\s\.:=]+(\d[\d,]*)/gi,
+                /GLOBAL\s+PAYMENTS?\s+(?:TRANS(?:ACTION)?S?|COUNT)[\s\.:=]+(\d[\d,]*)/gi
             ];
 
-            // Extract largest volume match (likely the total)
-            let maxVolume = 0;
-            let volumeMatches = [];
-            for (const pattern of volumePatterns) {
-                let match;
-                pattern.lastIndex = 0; // Reset regex
-                while ((match = pattern.exec(text)) !== null) {
-                    const value = parseFloat(match[1].replace(/,/g, ''));
-                    if (value > 1000 && value < 100000000) { // Sanity check - min $1000 to avoid matching fee amounts
-                        volumeMatches.push(value);
-                        if (value > maxVolume) {
-                            maxVolume = value;
-                        }
-                    }
-                }
-            }
-            result.volume = maxVolume;
-            console.log('Volume extraction - found values:', volumeMatches, 'selected:', maxVolume);
+            // ============================================================
+            // ENHANCED VOLUME PATTERNS (Feb 2026 - Comprehensive Bot Research Update)
+            // Patterns from 20-bot army analysis of 50+ processor statement formats
+            // Priority: Lower number = higher priority (more specific/reliable)
+            // ============================================================
+            const priorityVolumePatterns = [
+                // Priority 0: Most specific/reliable volume indicators
+                { pattern: /TOTAL\s+AMOUNT\s+SUBMITTED[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 0 }, // CardConnect/Fiserv
+                { pattern: /Amounts\s+Submitted[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Paysafe
+                { pattern: /Total\s+Processing\s+Service\s+Fees\s+of[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // GPI
+                { pattern: /TOTAL\s+BANKCARD\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // TSYS
+                { pattern: /GROSS\s+PROCESSING\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Square/Stripe
+                { pattern: /TOTAL\s+CARD\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Toast
 
-            // Extract fees - look for reasonable fee amounts (typically much smaller than volume)
-            let maxFees = 0;
-            let feeMatches = [];
-            for (const pattern of feePatterns) {
+                // Priority 1: Explicit deposit/volume totals
+                { pattern: /TOTAL\s+DEPOSITS?[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 1 },
+                { pattern: /Deposit\s+Totals?\s+\d+\s+\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // BB&T/TSYS
+                { pattern: /Total\s+Deposits:[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Heartland
+                // WorldPay deposit pattern - must have decimal format (not reference numbers)
+                { pattern: /DEPOSITS\s+[\d,]{1,6}\s+([\d,]+\.\d{2})/gi, priority: 1 }, // WorldPay (txn count + amount)
+                { pattern: /NET\s+DEPOSIT\s+AMOUNT[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Elavon
+                { pattern: /AMOUNT\s+DEPOSITED[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Wells Fargo
+                { pattern: /FUNDING\s+AMOUNT[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Chase Paymentech
+                { pattern: /TOTAL\s+FUNDED[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // PNC/BAMS
+                // EVO/TSYS Chain Statement - MTD Total line (first large number is volume)
+                { pattern: /^Total\s+([\d,]+\.\d{2})\s+[\d,]+\.\d{2}\s+[\d,]+\.\d{2}/gim, priority: 1 }, // EVO chain summary
+
+                // Priority 2: Sales totals by various names
+                // FIXED: Require $ before amount to prevent false positives on column headers
+                { pattern: /(?:NET|GROSS)\s+SALES[\s\.:=]*\$([\d,]+\.?\d{2})/gi, priority: 2 },
+                // VPS/EVO Card Summary TOTAL line format: TOTAL [count] $[amount]
+                { pattern: /^TOTAL\s+[\d,]+\s+\$([\d,]+\.\d{2})/gim, priority: 2 },
+                { pattern: /TOTAL\s+SALES[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 2 },
+                { pattern: /TOTAL\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 2 },
+                { pattern: /Grand\s+Totals\s+[\d,]+\s+\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // Nationwide
+                { pattern: /CC\s+Payments[\s\.:=\$]*([\d,]+\.?\d{2})/gi, priority: 2 }, // Storable/GPI
+                { pattern: /CREDIT\s+CARD\s+SALES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // Lightspeed
+                { pattern: /CARD\s+PRESENT\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // Clover
+                { pattern: /CARD\s+NOT\s+PRESENT\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // E-commerce
+                { pattern: /TOTAL\s+PROCESSED[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // PayPal/Stripe
+                { pattern: /SALES\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // Authorize.net
+                { pattern: /MONTHLY\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // NMI
+
+                // Priority 3: Card-type volume indicators
+                { pattern: /BANKCARD\s+SALES[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 3 },
+                { pattern: /CARD\s+SALES[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 3 },
+                { pattern: /Amount\s+of\s+Sales[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 }, // EVO/Omega
+                { pattern: /VISA\s+(?:SALES|VOLUME)[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 },
+                { pattern: /MASTERCARD\s+(?:SALES|VOLUME)[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 },
+                { pattern: /AMEX\s+(?:SALES|VOLUME)[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 },
+                { pattern: /DISCOVER\s+(?:SALES|VOLUME)[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 },
+                { pattern: /DEBIT\s+(?:SALES|VOLUME)[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 },
+                { pattern: /PIN\s+DEBIT\s+(?:SALES|VOLUME)[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 },
+
+                // Priority 4: Table-format totals (TOTAL row with sales count + volume)
+                { pattern: /TOTAL\s+[\d,]+\s+\$?([\d,]+\.?\d{2})(?:\s+\d+)?/gi, priority: 4 }, // First American & EVO/Omega
+                { pattern: /Totals\s+[\d,]+\s+\$?([\d,]+\.?\d{2})/gi, priority: 4 }, // Chase Paymentech
+                { pattern: /\*\*\s+[\d,]+\s+([\d,]+\.?\d{2})/gi, priority: 4 }, // BB&T plan summary
+                { pattern: /TOTALS?\s*:?\s+\d+\s+([\d,]+\.?\d{2})/gi, priority: 4 }, // Generic table total
+                { pattern: /ALL\s+CARDS?\s+[\d,]+\s+\$?([\d,]+\.?\d{2})/gi, priority: 4 }, // Multi-card summary
+
+                // Priority 5: Settlement/funding totals
+                { pattern: /(?:SETTLEMENT|FUNDING)\s+(?:TOTAL|AMOUNT)[\s\.:=\$]*([\d,]+\.?\d*)/gi, priority: 5 },
+                { pattern: /NET\s+(?:SETTLEMENT|FUNDING)[\s\.:=\$]*([\d,]+\.?\d*)/gi, priority: 5 },
+                { pattern: /Total\s+Amount\s+Processed[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 5 }, // Fiserv
+                { pattern: /BATCH\s+TOTALS?[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 5 }, // Generic
+                { pattern: /DAILY\s+TOTALS?[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 5 }, // Daily summary
+                { pattern: /PERIOD\s+TOTALS?[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 5 } // Statement period
+            ];
+
+            let bestVolume = 0;
+            let bestVolumePriority = 999;
+            let volumeMatches = [];
+
+            for (const { pattern, priority } of priorityVolumePatterns) {
                 let match;
-                pattern.lastIndex = 0; // Reset regex
+                pattern.lastIndex = 0;
                 while ((match = pattern.exec(text)) !== null) {
                     const value = parseFloat(match[1].replace(/,/g, ''));
-                    // Fees should be reasonable - typically 1-5% of volume, max $50k
-                    if (value > 0 && value < 50000 && (maxVolume === 0 || value < maxVolume * 0.1)) {
-                        feeMatches.push(value);
-                        if (value > maxFees) {
-                            maxFees = value;
+                    if (value > 1000 && value < 100000000) {
+                        volumeMatches.push({ value, priority, match: match[0].substring(0, 40) });
+                        // Prefer higher priority (lower number) OR larger value at same priority
+                        if (priority < bestVolumePriority || (priority === bestVolumePriority && value > bestVolume)) {
+                            bestVolume = value;
+                            bestVolumePriority = priority;
                         }
                     }
                 }
             }
-            result.fees = maxFees;
-            console.log('Fee extraction - found values:', feeMatches, 'selected:', maxFees);
+
+            // Fallback to generic patterns if no priority match found
+            if (bestVolume === 0) {
+                for (const pattern of volumePatterns) {
+                    let match;
+                    pattern.lastIndex = 0;
+                    while ((match = pattern.exec(text)) !== null) {
+                        const value = parseFloat(match[1].replace(/,/g, ''));
+                        if (value > 1000 && value < 100000000) {
+                            volumeMatches.push({ value, priority: 10, match: match[0].substring(0, 40) });
+                            if (value > bestVolume) {
+                                bestVolume = value;
+                            }
+                        }
+                    }
+                }
+            }
+
+            result.volume = bestVolume;
+            console.log('Volume extraction - found values:', volumeMatches, 'selected:', bestVolume);
+
+            // ============================================================
+            // ENHANCED FEE PATTERNS (Feb 2026 - Comprehensive Bot Research Update)
+            // Patterns from 20-bot army analysis of 50+ processor statement formats
+            // Priority: Lower number = higher priority (more specific/reliable)
+            // ============================================================
+            const priorityFeePatterns = [
+                // Priority -2: MOST SPECIFIC patterns - CardConnect summary page (HIGHEST priority)
+                { pattern: /Page\s+\d+\s+Fees\s+-?\$?([\d,]+\.?\d{2})/gi, priority: -2 },
+                // Stax/Payment Depot "TOTAL COST" summary box
+                { pattern: /TOTAL\s+COST[\s\.:=\$]*\$?([\d,]+\.?\d{2})\s*$/gim, priority: -2 },
+
+                // Priority -1: Highly specific patterns
+                { pattern: /TOTAL\s*\([^)]*(?:FEES|CHARGES)[^)]*\)[\s\.:=]*-?\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // CardConnect
+                { pattern: /YOUR\s+MERCHANT\s+ACCOUNT\s+HAS\s+BEEN\s+DEBITED:?\s*\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // Nationwide
+                { pattern: /Account\s+Has\s+Been\s+Debited.*?(?:for|of)\s+\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // EVO/Omega
+                { pattern: /AMOUNT\s+DEBITED[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // Clearent
+                { pattern: /TOTAL\s+AMOUNT\s+DEDUCTED[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // REPAY
+                { pattern: /YOUR\s+FEES\s+THIS\s+MONTH[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // Helcim
+                { pattern: /TOTAL\s+MONTHLY\s+COST[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: -1 }, // Dharma
+
+                // Priority 0: Explicit processor totals (very reliable)
+                { pattern: /TOTAL\s+CREDIT\s+CARD\s+FEES:?[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 0 }, // Heartland
+                { pattern: /Amount\s+Deducted:?[\s\.:=\$]*\$?\s*([\d,]+\.?\d*)/gi, priority: 0 }, // Paya/BB&T/TSYS
+                { pattern: /TOTAL\s+DUE[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi, priority: 0 },
+                { pattern: /Fees\s+Charged[\s\.:=\$]*-?\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Paysafe
+                { pattern: /TOTAL\s+CARD\s+FEES[\s\.:=\$]*\$?\s*([\d,]+\.?\d{2})/gi, priority: 0 }, // First American
+                { pattern: /TOTAL\s+CHARGE\s+TO\s+YOUR\s+ACCOUNT[\s\S]*?TOTAL[\s\.:=\$]*\$?\s*([\d,]+\.?\d{2})/gi, priority: 0 }, // First American
+                { pattern: /PROCESSING\s+FEES\s+TOTAL[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Square
+                { pattern: /TOTAL\s+STRIPE\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Stripe
+                { pattern: /PAYPAL\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // PayPal
+                { pattern: /TOAST\s+PROCESSING\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Toast
+                { pattern: /CLOVER\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Clover
+                { pattern: /TOTAL\s+MERCHANT\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 0 }, // Generic
+
+                // Priority 1: Standard fee totals
+                { pattern: /TOTAL\s+FEES[\s\.:=\$]+([\d,]+\.?\d{2})/gi, priority: 1 }, // WorldPay
+                { pattern: /Total\s+Processing\s+Service\s+Fees[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // GPI
+                { pattern: /Fees[\s\.:=\$]*\(-?([\d,]+\.?\d{2})\)/gi, priority: 1 }, // Storable (parentheses format)
+                { pattern: /Total\s+\(Misc\s+Fees\s+and\s+Card\s+Fees\)[\s\.:=\$]*-?\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Paysafe
+                { pattern: /TOTAL\s+PROCESSING\s+CHARGES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Elavon
+                { pattern: /MERCHANT\s+DISCOUNT[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Wells Fargo
+                { pattern: /TOTAL\s+SERVICE\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // Chase
+                { pattern: /NET\s+PROCESSING\s+FEES[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 1 }, // BOA
+
+                // Priority 2: General fee totals
+                { pattern: /TOTAL\s+CHARGES[\s\.:=\$]*-?\$?([\d,]+\.?\d*)/gi, priority: 2 },
+                { pattern: /TOTAL\s+DEDUCTIONS[\s\.:=\$]*-?\$?([\d,]+\.?\d*)/gi, priority: 2 },
+                { pattern: /NET\s+FEES[\s\.:=\$]*-?\$?([\d,]+\.?\d*)/gi, priority: 2 },
+                { pattern: /Discount\s+Due[\s\.:=\$]*([\d,]+\.?\d{2})/gi, priority: 2 }, // BB&T
+                { pattern: /Fees\s+Due[\s\.:=\$]*([\d,]+\.?\d{2})/gi, priority: 2 }, // BB&T
+                { pattern: /TOTAL\s+COST\s+OF\s+PROCESSING[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // NAB
+                { pattern: /TOTAL\s+DISCOUNT[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // Payroc
+                { pattern: /TOTAL\s+ASSESSMENTS[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 2 }, // Priority Payment
+
+                // Priority 3: Table-format fee totals
+                { pattern: /^\s*TOTAL\s{2,}-\$?([\d,]+\.?\d{2})/gim, priority: 3 }, // CardConnect standalone
+                { pattern: /Total[\s\.:=\$]*\(-?([\d,]+\.?\d{2})\)\s*$/gim, priority: 3 }, // Storable end-of-line
+                { pattern: /TOTAL\s+\$[\d,]+\.?\d{2}\s+\(\$([\d,]+\.?\d{2})\)/gi, priority: 3 }, // Chase Paymentech
+                { pattern: /FEES\s+SUBTOTAL[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 }, // Generic subtotal
+                { pattern: /BILLING\s+TOTAL[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 3 }, // Billing summary
+
+                // Priority 4: Fee section totals (may include subtotals)
+                { pattern: /Total\s+Interchange\s+Charges[\s\S]*?([\d,]+\.?\d{2})/gi, priority: 4 },
+                { pattern: /Total\s+Service\s+Charges[\s\S]*?([\d,]+\.?\d{2})/gi, priority: 4 },
+                { pattern: /Interchange\/Card\s+Brand\s+Fees[\s\S]*?\(-?([\d,]+\.?\d{2})\)/gi, priority: 4 }, // Storable
+                { pattern: /INTERCHANGE\s+TOTAL[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 4 },
+                { pattern: /ASSESSMENT\s+TOTAL[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 4 },
+                { pattern: /DUES\s+AND\s+ASSESSMENTS[\s\.:=\$]*\$?([\d,]+\.?\d{2})/gi, priority: 4 }
+            ];
+
+            let bestFees = 0;
+            let bestFeesPriority = 999;
+            let feeMatches = [];
+
+            for (const { pattern, priority } of priorityFeePatterns) {
+                let match;
+                pattern.lastIndex = 0;
+                while ((match = pattern.exec(text)) !== null) {
+                    const value = parseFloat(match[1].replace(/,/g, ''));
+                    // Fees should be reasonable - typically 1-10% of volume, max $100k
+                    if (value > 0 && value < 100000 && (bestVolume === 0 || value < bestVolume * 0.15)) {
+                        feeMatches.push({ value, priority, match: match[0].substring(0, 40) });
+                        // Prefer higher priority (lower number) OR larger value at same priority
+                        if (priority < bestFeesPriority || (priority === bestFeesPriority && value > bestFees)) {
+                            bestFees = value;
+                            bestFeesPriority = priority;
+                        }
+                    }
+                }
+            }
+
+            // Fallback to generic fee patterns if no priority match found
+            if (bestFees === 0) {
+                for (const pattern of feePatterns) {
+                    let match;
+                    pattern.lastIndex = 0;
+                    while ((match = pattern.exec(text)) !== null) {
+                        const value = parseFloat(match[1].replace(/,/g, ''));
+                        if (value > 0 && value < 100000 && (bestVolume === 0 || value < bestVolume * 0.15)) {
+                            feeMatches.push({ value, priority: 10, match: match[0].substring(0, 40) });
+                            if (value > bestFees) {
+                                bestFees = value;
+                            }
+                        }
+                    }
+                }
+            }
+
+            result.fees = bestFees;
+            console.log('Fee extraction - found values:', feeMatches, 'selected:', bestFees);
 
             // If we couldn't find fees but have volume, try to sum up individual fee line items
             if (result.fees === 0 && result.volume > 0) {
@@ -3060,7 +3277,88 @@ PCI COMPLIANCE              $19.95
 
             // Debit/Durbin Related
             { pattern: /DURBIN\s*(CAP|REGULATED|EXEMPT)/i, confidence: 0.95 },
-            { pattern: /DEBIT\s*ROUTING\s*FEE/i, confidence: 0.85 }
+            { pattern: /DEBIT\s*ROUTING\s*FEE/i, confidence: 0.85 },
+
+            // === BOT RESEARCH: Comprehensive Card Brand Fee Patterns (Feb 2026) ===
+            // VISA Assessment Fees
+            { pattern: /VISA\s*APF|V\s*APF/i, confidence: 0.95 }, // Acquirer Processing Fee
+            { pattern: /VISA\s*ISA|V\s*ISA/i, confidence: 0.95 }, // International Service Assessment
+            { pattern: /VISA\s*TIF|V\s*TIF/i, confidence: 0.95 }, // Transaction Integrity Fee
+            { pattern: /VISA\s*VDIF/i, confidence: 0.95 }, // Visa Debit Interchange Fee
+            { pattern: /V\s*CNP\s*AUTH/i, confidence: 0.90 }, // Card Not Present Auth
+            { pattern: /V\s*MISUSE/i, confidence: 0.95 }, // Visa Misuse Fee
+            { pattern: /VISA\s*KILOBYTE/i, confidence: 0.95 }, // Data Fee
+
+            // MASTERCARD Assessment Fees
+            { pattern: /MC\s*ALF|ACQUIRING\s*LICENSE\s*FEE/i, confidence: 0.95 }, // Acquiring License Fee
+            { pattern: /MC\s*CLEARING\s*FEE/i, confidence: 0.95 },
+            { pattern: /MC\s*ACCOUNT\s*STATUS\s*INQUIRY/i, confidence: 0.95 },
+            { pattern: /MC\s*AUTH\s*ATTEMPT/i, confidence: 0.90 },
+            { pattern: /MC\s*DIGITAL\s*ENABLEMENT/i, confidence: 0.95 }, // Digital commerce fee
+            { pattern: /MASTERCARD\s*INTEGRITY\s*FEE/i, confidence: 0.95 },
+            { pattern: /MC\s*FRAUD\s*SCORE/i, confidence: 0.90 },
+
+            // DISCOVER/Pulse Assessment Fees
+            { pattern: /DISCOVER\s*DATA\s*USAGE/i, confidence: 0.95 },
+            { pattern: /DISCOVER\s*NETWORK\s*AUTH/i, confidence: 0.95 },
+            { pattern: /DS\s*ASSESS|DISCOVER\s*ASSESSMENT/i, confidence: 0.95 },
+            { pattern: /PULSE\s*ASSESS|PULSE\s*NETWORK\s*FEE/i, confidence: 0.95 },
+
+            // AMEX Assessment Fees
+            { pattern: /AMEX\s*NETWORK\s*FEE/i, confidence: 0.95 },
+            { pattern: /AMEX\s*CNP\s*FEE/i, confidence: 0.95 }, // Card Not Present
+            { pattern: /OPTBLUE\s*(ASSESS|FEE)/i, confidence: 0.95 },
+            { pattern: /AX\s*ASSESS/i, confidence: 0.90 },
+
+            // PIN Debit Networks (Bot Research)
+            { pattern: /STAR\s*(ASSESS|FEE|SWITCH)/i, confidence: 0.95 },
+            { pattern: /PULSE\s*(ASSESS|FEE|SWITCH)/i, confidence: 0.95 },
+            { pattern: /NYCE\s*(ASSESS|FEE|SWITCH)/i, confidence: 0.95 },
+            { pattern: /ACCEL\s*(ASSESS|FEE|SWITCH)/i, confidence: 0.95 },
+            { pattern: /INTERLINK\s*(ASSESS|FEE)/i, confidence: 0.95 },
+            { pattern: /MAESTRO\s*(ASSESS|FEE)/i, confidence: 0.95 },
+            { pattern: /SHAZAM\s*(ASSESS|FEE)/i, confidence: 0.95 },
+            { pattern: /CO-?OP\s*(ASSESS|FEE)/i, confidence: 0.90 },
+            { pattern: /JEANIE\s*(ASSESS|FEE)/i, confidence: 0.90 },
+            { pattern: /CULIANCE\s*(ASSESS|FEE)/i, confidence: 0.90 },
+
+            // Interchange Category Names (Bot Research - 50+ Processors)
+            // Visa CPS Categories
+            { pattern: /CPS\s*REWARDS\s*[12]/i, confidence: 0.95 },
+            { pattern: /CPS\s*SMALL\s*TICKET/i, confidence: 0.95 },
+            { pattern: /CPS\s*CNP|CPS\s*CARD\s*NOT\s*PRESENT/i, confidence: 0.95 },
+            { pattern: /CPS\s*SERVICE\s*STATION/i, confidence: 0.95 },
+            { pattern: /CPS\s*HOTEL/i, confidence: 0.95 },
+            { pattern: /CPS\s*CAR\s*RENTAL/i, confidence: 0.95 },
+            { pattern: /CPS\s*AUTOMATED\s*FUEL/i, confidence: 0.95 },
+            { pattern: /CPS\s*PASSENGER\s*TRANSPORT/i, confidence: 0.95 },
+            { pattern: /SIGNATURE\s*PREFERRED/i, confidence: 0.95 },
+            { pattern: /INFINITE\s*PREFERRED/i, confidence: 0.95 },
+            { pattern: /VISA\s*TRADITIONAL\s*REWARDS/i, confidence: 0.95 },
+
+            // Mastercard Merit Categories
+            { pattern: /MERIT\s*(BASE|I|II|III|1|2|3)/i, confidence: 0.95 },
+            { pattern: /SUPERMARKET\s*MERIT/i, confidence: 0.95 },
+            { pattern: /SERVICE\s*INDUSTRY\s*MERIT/i, confidence: 0.95 },
+            { pattern: /WORLD\s*HIGH\s*VALUE/i, confidence: 0.95 },
+            { pattern: /ENHANCED\s*MERIT/i, confidence: 0.95 },
+
+            // Discover Categories
+            { pattern: /CONSUMER\s*CREDIT\s*RETAIL/i, confidence: 0.90 },
+            { pattern: /PREMIUM\s*PLUS\s*RETAIL/i, confidence: 0.90 },
+            { pattern: /REWARDS\s*RETAIL/i, confidence: 0.90 },
+
+            // Amex OptBlue Categories
+            { pattern: /OPTBLUE\s*TIER\s*[123]/i, confidence: 0.95 },
+            { pattern: /RETAIL\s*TIER\s*[123]/i, confidence: 0.90 },
+            { pattern: /RESTAURANT\s*TIER/i, confidence: 0.90 },
+
+            // Tiered/Bundled Pricing Indicators (should be flagged for review)
+            { pattern: /QUAL(?:IFIED)?\s*(?:RATE|DISC)/i, confidence: 0.80 },
+            { pattern: /MID[\s-]*QUAL(?:IFIED)?\s*(?:RATE|DISC)/i, confidence: 0.80 },
+            { pattern: /NON[\s-]*QUAL(?:IFIED)?\s*(?:RATE|DISC)/i, confidence: 0.80 },
+            { pattern: /EIRF\s*(?:SURCHARGE|DOWNGRADE)/i, confidence: 0.85 },
+            { pattern: /ERR\s*SURCHARGE/i, confidence: 0.85 }
         ];
 
         // ============================================================
