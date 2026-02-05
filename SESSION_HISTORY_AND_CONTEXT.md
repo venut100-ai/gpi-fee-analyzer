@@ -97,6 +97,35 @@ The **GPI Fee Analyzer** is a browser-based merchant processing statement analyz
 
 ## 🧠 Knowledge Gained
 
+### Statement Inventory (52 Actual Merchant Statements)
+
+**Total PDFs Analyzed:** 63 files
+**Actual Merchant Statements:** 52
+**Reference Documents:** 11 (interchange schedules, manuals)
+
+### Processors Identified from Your Uploaded Statements
+
+| Processor | Count | Example Files |
+|-----------|-------|---------------|
+| Global Payments Integrated | 7 | Aug Statement Eisner Adv Group.pdf, NW Specialty.pdf |
+| Heartland (Global Payments) | 6 | Passport Statement - 11-2018.pdf, July statement.pdf |
+| Storable Payments | 5 | CSI Alameda Statements.pdf, Storable Payments_statement.pdf |
+| CardConnect/CardPointe | 5 | 103 Fort Collins.pdf, 201 Hillcrest.pdf |
+| WorldPay | 4 | BMG FTW WorldPay.pdf, Nov25 Statement.pdf |
+| First Data/Fiserv | 4 | First Data Statement.pdf, Store 206 Statement.pdf |
+| Chase Paymentech | 3 | Chase Statement31-MAY-2024.pdf, 5892156 CC RETAIL.pdf |
+| Paya/VPS | 4 | VPS Statement September 2019.pdf, Vivid Impact.pdf |
+| TSYS/EVO | 2 | Goodwill CCVA_Chain Statement.pdf |
+| Paysafe | 1 | Statement_11-01-2024.pdf |
+| VizyPay | 1 | VizyPay 12.1-12.31.25.pdf |
+| Riverside Payments | 1 | December RIverside.pdf |
+| Payment Depot/Stax | 1 | stax june 2025 Prattville Pickers.pdf |
+| BB&T Merchant Services | 1 | Nov Statements.pdf |
+| Nationwide Payments | 1 | Tanners MOTO Statements.pdf |
+| Wells Fargo | 1 | 224180060994- E-Commerce.pdf |
+| Elavon | 1 | Elavon Statement.pdf (OCR needed) |
+| TransFirst | 1 | Statement from Transfirst Bangor Bank.pdf (OCR needed) |
+
 ### Processor Statement Formats Documented
 
 | Processor | Volume Pattern | Fee Pattern |
@@ -111,7 +140,11 @@ The **GPI Fee Analyzer** is a browser-based merchant processing statement analyz
 | Nationwide | `Grand Totals [count] $[amount]` | `YOUR MERCHANT ACCOUNT HAS BEEN DEBITED` |
 | Stax/Payment Depot | `Gross Sales` | `TOTAL COST` |
 | First American/BAMS | `TOTAL [count] $[amount]` | `TOTAL CARD FEES` |
-| VPS/Vision Payments | `^TOTAL [count] $[amount]` (Card Summary) | `Account Has Been Debited...for $` |
+| VPS/Paya | `^TOTAL [count] $[amount]` (Card Summary) | `Account Has Been Debited...for $` |
+| Global Payments Integrated | Hierarchy format with location codes | Line item fees |
+| Storable Payments | `CC Payments` column | `Interchange/Card Brand Fees` |
+| Chase Paymentech | `Deposit Summary` | `IPTR` format |
+| VizyPay | `YOUR CARD PROCESSING STATEMENT` | Standard ISO format |
 
 ### Critical Pattern Priority System
 - **Priority -2:** Most specific (CardConnect `Page X Fees`, Stax `TOTAL COST`)
