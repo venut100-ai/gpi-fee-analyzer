@@ -867,6 +867,45 @@ PCI COMPLIANCE              $19.95
                 <div class="hidden-fee-list" id="hiddenFeeList"></div>
             </div>
 
+            <!-- NEW: Fee Bucket Summary -->
+            <div class="card" id="feeBucketSummary" style="margin-bottom: 1.5rem;">
+                <h3 class="card-title" style="margin-bottom: 1rem;">💰 Fee Category Breakdown</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem;">
+                    <div style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #1e40af; text-transform: uppercase; font-weight: 600;">Disc Rate</div>
+                        <div id="bucketDiscRate" style="font-size: 1.25rem; font-weight: 700; color: #1e3a8a;">$0.00</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #166534; text-transform: uppercase; font-weight: 600;">Per Trans</div>
+                        <div id="bucketPerTrans" style="font-size: 1.25rem; font-weight: 700; color: #14532d;">$0.00</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #92400e; text-transform: uppercase; font-weight: 600;">Per Auth</div>
+                        <div id="bucketPerAuth" style="font-size: 1.25rem; font-weight: 700; color: #78350f;">$0.00</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #9d174d; text-transform: uppercase; font-weight: 600;">Batch Fee</div>
+                        <div id="bucketBatchFee" style="font-size: 1.25rem; font-weight: 700; color: #831843;">$0.00</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #6b21a8; text-transform: uppercase; font-weight: 600;">Monthly Fee</div>
+                        <div id="bucketMonthlyFee" style="font-size: 1.25rem; font-weight: 700; color: #581c87;">$0.00</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #991b1b; text-transform: uppercase; font-weight: 600;">Other Fees</div>
+                        <div id="bucketOtherFee" style="font-size: 1.25rem; font-weight: 700; color: #7f1d1d;">$0.00</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.75rem; color: #374151; text-transform: uppercase; font-weight: 600;">Pass-Through</div>
+                        <div id="bucketPassThrough" style="font-size: 1.25rem; font-weight: 700; color: #111827;">$0.00</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #d1d5db; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                    <div><strong>Total Controllable:</strong> <span id="bucketTotalControllable" style="color: #16a34a; font-weight: 700;">$0.00</span> <span style="font-size: 0.8rem; color: #6b7280;">(Negotiable - your savings opportunities)</span></div>
+                    <div><strong>Total Pass-Through:</strong> <span id="bucketTotalPassThrough" style="color: #6b7280; font-weight: 700;">$0.00</span> <span style="font-size: 0.8rem; color: #6b7280;">(Fixed - same for all processors)</span></div>
+                </div>
+            </div>
+
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <h3 class="card-title" style="margin: 0;">📊 Fee Breakdown</h3>
@@ -1243,6 +1282,16 @@ PCI COMPLIANCE              $19.95
                 pinDebit: 0,
                 signatureDebit: 0,
                 potentialSavings: 0
+            },
+            // NEW: Fee bucket totals for accurate comparison
+            feeBuckets: {
+                discRate: 0,      // Percentage-based discount/markup
+                perTrans: 0,      // Per-transaction fees
+                perAuth: 0,       // Per-authorization fees
+                batchFee: 0,      // Batch/settlement fees
+                monthlyFee: 0,    // Fixed monthly fees
+                otherFee: 0,      // Other controllable fees
+                passThrough: 0    // Interchange + assessments (not controllable)
             }
         };
 
@@ -1571,6 +1620,16 @@ PCI COMPLIANCE              $19.95
                     pinDebit: 0,
                     signatureDebit: 0,
                     potentialSavings: 0
+                },
+                // Fee bucket totals
+                feeBuckets: {
+                    discRate: 0,
+                    perTrans: 0,
+                    perAuth: 0,
+                    batchFee: 0,
+                    monthlyFee: 0,
+                    otherFee: 0,
+                    passThrough: 0
                 },
                 analysisDate: null
             };
@@ -2008,7 +2067,7 @@ PCI COMPLIANCE              $19.95
         const PROCESSOR_PATTERNS = {
             // Major processors - patterns use regex with word boundaries to avoid false positives
             'TSYS': { patterns: ['\\bTSYS\\b', '\\bCAYAN\\b', '\\bTRANSFIRST\\b', '\\bVITAL\\b'], confidence: 0.9, useRegex: true },
-            'FISERV': { patterns: ['\\bFISERV\\b', 'FIRST DATA', 'FIRSTDATA', '\\bCARDNET\\b', '\\bBAMS\\b', 'BANK OF AMERICA MERCHANT'], confidence: 0.9, useRegex: true },
+            'FISERV': { patterns: ['\\bFISERV\\b', 'FIRST DATA', 'FIRSTDATA', '\\bCARDNET\\b', '\\bBAMS\\b', 'BANK OF AMERICA MERCHANT', '\\bCARDCONNECT\\b', 'CARDPOINTE', 'A FIRST DATA COMPANY'], confidence: 0.9, useRegex: true },
             'WORLDPAY': { patterns: ['\\bWORLDPAY\\b', '\\bVANTIV\\b', '\\bSPREEDLY\\b', 'FIS WORLDPAY'], confidence: 0.9, useRegex: true },
             'ELAVON': { patterns: ['\\bELAVON\\b', 'US BANK MERCHANT', '\\bNOVA\\b'], confidence: 0.9, useRegex: true },
             'GLOBAL': { patterns: ['GLOBAL PAYMENTS', '\\bHEARTLAND\\b', '\\bOPENEDGE\\b', 'ACTIVE NETWORK'], confidence: 0.9, useRegex: true },
@@ -2273,6 +2332,12 @@ PCI COMPLIANCE              $19.95
             // Added: "TOTAL SALES" without $, table formats, month comparisons
             // ============================================================
             const volumePatterns = [
+                // CardConnect/First Data format: "Total Amount Submitted $6,467.66"
+                /TOTAL\s+AMOUNT\s+(?:SUBMITTED|PROCESSED)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+
+                // CardConnect summary table: "Total 516 $6,467.66" (transactions then amount)
+                /TOTAL\s+\d+\s+\$?([\d,]+\.?\d{2})/gi,
+
                 // Explicit total volume/sales patterns
                 /(?:TOTAL\s+)?(?:SALES|VOLUME|GROSS\s+SALES|NET\s+SALES|CARD\s+SALES|BANKCARD\s+SALES|TOTAL\s+AMOUNT)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /(?:VISA|MC|MASTERCARD|AMEX|DISCOVER|DEBIT)[\s\w]*(?:VOLUME|SALES)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
@@ -2324,8 +2389,17 @@ PCI COMPLIANCE              $19.95
             // Added: processor-specific formats, 2025-2026 fee types
             // ============================================================
             const feePatterns = [
-                /(?:TOTAL\s+)?(?:FEES|CHARGES|PROCESSING\s+FEES|DISCOUNT|TOTAL\s+DEDUCTIONS)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
-                /(?:AMOUNT\s+)?(?:DEDUCTED|CHARGED)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                // CardConnect/First Data format: "Fees -$457.19" (negative amount)
+                /FEES[\s\.:=]*-?\$?([\d,]+\.?\d*)/gi,
+
+                // TOTAL line with negative: "TOTAL -$457.19"
+                /TOTAL[\s\.:=]*-\$?([\d,]+\.?\d*)/gi,
+
+                // Total (Service Charges, Interchange Charges, and Fees) pattern
+                /TOTAL\s*\([^)]+\)[\s\.:=]*-?\$?([\d,]+\.?\d*)/gi,
+
+                /(?:TOTAL\s+)?(?:FEES|CHARGES|PROCESSING\s+FEES|DISCOUNT|TOTAL\s+DEDUCTIONS)[\s\.:=\$]*-?\$?([\d,]+\.?\d*)/gi,
+                /(?:AMOUNT\s+)?(?:DEDUCTED|CHARGED)[\s\.:=\$]*-?\$?([\d,]+\.?\d*)/gi,
                 /TOTAL\s+(?:DUE|OWED|AMOUNT)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /(?:PROCESSING|SERVICE)\s+FEE(?:S)?[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
                 /NET\s+(?:FEES|CHARGES)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
@@ -2364,6 +2438,12 @@ PCI COMPLIANCE              $19.95
             // Added: table formats, processor-specific patterns
             // ============================================================
             const txnPatterns = [
+                // CardConnect format: "Total 516 $6,467.66" - capture 516
+                /TOTAL\s+(\d+)\s+\$[\d,]+\.\d{2}/gi,
+
+                // Items count in table: "Items Amount" rows with "516" as items
+                /(?:ITEMS?|COUNT)\s+(\d+)\s+\$[\d,]+/gi,
+
                 /(?:TOTAL\s+)?(?:TRANSACTIONS?|ITEMS?|COUNT|# OF TRANS|NBR\s+TRANS)[\s\.:=]+(\d[\d,]*)/gi,
                 /(\d[\d,]*)\s+(?:TRANSACTIONS?|ITEMS?|SALES)/gi,
                 /TRANS(?:ACTION)?\s*(?:COUNT|#|NBR)[\s\.:=]+(\d[\d,]*)/gi,
@@ -2553,10 +2633,12 @@ PCI COMPLIANCE              $19.95
                             if (amount > 50000) continue;
 
                             const category = categorizeFee(name);
+                            const feeType = determineFeeType(name);
                             fees.push({
                                 name: name.toUpperCase(),
                                 amount: amount,
                                 category: category.category,
+                                feeType: feeType,  // NEW: Fee bucket type
                                 confidence: category.confidence,
                                 isHiddenFee: category.isHidden,
                                 hiddenInfo: category.hiddenInfo
@@ -2577,10 +2659,12 @@ PCI COMPLIANCE              $19.95
 
                 if (name.length > 2 && amount > 0 && amount < 50000 && !isNaN(amount)) {
                     const category = categorizeFee(name);
+                    const feeType = determineFeeType(name);
                     fees.push({
                         name: name.toUpperCase(),
                         amount: amount,
                         category: category.category,
+                        feeType: feeType,  // NEW: Fee bucket type
                         confidence: category.confidence,
                         isHiddenFee: category.isHidden,
                         hiddenInfo: category.hiddenInfo
@@ -2602,6 +2686,119 @@ PCI COMPLIANCE              $19.95
         // ============================================================
         // FEE CATEGORIZATION ENGINE
         // ============================================================
+
+        // ============================================================
+        // FEE BUCKET CLASSIFICATION
+        // Categorizes fees into specific pricing component buckets
+        // ============================================================
+        const FEE_BUCKET_PATTERNS = {
+            // DISCOUNT RATE - Percentage-based fees on volume
+            DISC_RATE: [
+                /DISC(?:OUNT)?\s*RATE/i,
+                /SALES\s*DISCOUNT/i,
+                /(\d+\.?\d*)\s*%?\s*(?:DISC|RATE)\s*(?:RATE|TIMES)/i,
+                /PROCESSING\s*(?:RATE|FEE).*%/i,
+                /MARKUP.*%/i,
+                /BASIS\s*POINT|BPS/i,
+                /MERCHANT\s*DISCOUNT/i,
+                /QUALIFIED\s*(?:RATE|DISC)/i,
+                /MID[\s-]*QUAL(?:IFIED)?\s*(?:RATE|DISC)/i,
+                /NON[\s-]*QUAL(?:IFIED)?\s*(?:RATE|DISC)/i,
+            ],
+
+            // PER TRANSACTION - Flat fee per transaction (non-auth transaction fees)
+            PER_TRANS: [
+                /PER\s*(?:TRANS(?:ACTION)?|TXN|ITEM)/i,
+                /TRANSACTION\s*FEE(?!\s*INT)/i,  // Exclude "Transaction Integrity"
+                /ITEM\s*FEE/i,
+                /ACCESS\s*FEE/i,  // Network access fees (per transaction)
+            ],
+
+            // PER AUTH - Authorization fees (includes auth fees with "X TRANSACTIONS AT")
+            PER_AUTH: [
+                /AUTH(?:ORIZATION)?\s*FEE/i,
+                /\d+\s*TRANSACTIONS?\s*AT\s*[\$\d\.]*\d+/i,  // "98 TRANSACTIONS AT 0.2544"
+                /NETWORK\s*AUTH/i,
+                /VOICE\s*AUTH/i,
+                /AVS\s*(?:FEE|CHARGE)/i,
+                /AUTHORIZATION\s*(?:CHARGE|COST)/i,
+            ],
+
+            // BATCH FEE - Settlement/batch fees
+            BATCH_FEE: [
+                /BATCH\s*(?:FEE|SETTLEMENT|HEADER|CHARGE)/i,
+                /SETTLEMENT\s*FEE/i,
+                /(\d+)\s*SETTLEMENT\s*FEES?\s*AT/i,
+                /BATCH\s*CLOSE/i,
+                /DAILY\s*BATCH/i,
+            ],
+
+            // MONTHLY FEES - Fixed monthly charges
+            MONTHLY_FEE: [
+                /MONTHLY\s*(?:FEE|SERVICE|ACCOUNT|STATEMENT|MAINTENANCE)/i,
+                /STATEMENT\s*FEE/i,
+                /ACCOUNT\s*(?:FEE|MAINTENANCE)/i,
+                /PCI\s*(?:FEE|COMPLIANCE|NON[\s-]*COMPLIANCE)/i,
+                /ANNUAL.*(?:FEE|CHARGE)/i,
+                /PLATFORM\s*FEE/i,
+                /GATEWAY\s*(?:FEE|ACCESS)/i,
+                /EQUIPMENT\s*(?:LEASE|RENTAL|FEE)/i,
+                /TERMINAL\s*(?:FEE|RENTAL)/i,
+                /MINIMUM\s*(?:FEE|PROCESSING)/i,
+                /LOCATION\s*FEE/i,
+                /REPORTING\s*(?:FEE|ACCESS)/i,
+                /(?:CLOVER|CARDPOINTE|POYNT)\s*(?:FEE|PLATFORM)/i,
+            ],
+
+            // OTHER FEES - Miscellaneous controllable fees
+            OTHER_FEE: [
+                /CHARGEBACK\s*(?:FEE|CHARGE)/i,
+                /RETRIEVAL\s*(?:FEE|REQUEST)/i,
+                /ACH\s*(?:FEE|REJECT|RETURN)/i,
+                /NSF\s*FEE/i,
+                /WIRE\s*(?:FEE|TRANSFER)/i,
+                /EARLY\s*TERMINATION/i,
+                /CANCELLATION\s*FEE/i,
+                /SETUP\s*FEE/i,
+                /PROGRAMMING\s*FEE/i,
+                /PAPER\s*STATEMENT/i,
+                /TRAINING\s*FEE/i,
+                /IRS\s*(?:REPORTING|1099)/i,
+                /TIN\s*(?:INVALID|MISMATCH)/i,
+                /REGULATORY/i,
+                /SECURITY\s*(?:FEE|ASSESSMENT)/i,
+                /RISK\s*(?:FEE|ASSESSMENT|MANAGEMENT)/i,
+                /TECHNOLOGY\s*FEE/i,
+                /DIGITAL\s*(?:INVESTMENT|FEE)/i,
+                /CONNECTIVITY\s*FEE/i,
+                /NETWORK\s*(?:FEE|ACCESS)(?!\s*ASSESSMENT)/i,
+                /DATA\s*(?:FEE|USAGE|BREACH)/i,
+                /INTEGRITY\s*FEE/i,
+                /KILOBYTE/i,
+                /FILE\s*FEE/i,
+            ]
+        };
+
+        // Function to determine fee bucket type
+        function determineFeeType(feeName, feeDescription = '') {
+            const textToCheck = (feeName + ' ' + feeDescription).toUpperCase();
+
+            // Check in specific order: more specific patterns first
+            // PER_AUTH must be checked before PER_TRANS because auth fees contain "TRANSACTIONS AT"
+            const checkOrder = ['DISC_RATE', 'PER_AUTH', 'BATCH_FEE', 'MONTHLY_FEE', 'PER_TRANS', 'OTHER_FEE'];
+
+            for (const bucketType of checkOrder) {
+                const patterns = FEE_BUCKET_PATTERNS[bucketType];
+                if (patterns) {
+                    for (const pattern of patterns) {
+                        if (pattern.test(textToCheck)) {
+                            return bucketType;
+                        }
+                    }
+                }
+            }
+            return 'OTHER_FEE'; // Default bucket
+        }
 
         // ============================================================
         // COMPREHENSIVE FEE PATTERN DATABASE
@@ -3130,6 +3327,49 @@ PCI COMPLIANCE              $19.95
                 currentState.effectiveRate = (currentState.totalFees / currentState.totalVolume * 100);
             }
 
+            // NEW: Calculate fee bucket totals
+            currentState.feeBuckets = {
+                discRate: 0,
+                perTrans: 0,
+                perAuth: 0,
+                batchFee: 0,
+                monthlyFee: 0,
+                otherFee: 0,
+                passThrough: 0
+            };
+
+            for (const fee of currentState.fees) {
+                // Pass-through goes to its own bucket regardless of feeType
+                if (fee.category === 'PASS_THROUGH') {
+                    currentState.feeBuckets.passThrough += fee.amount;
+                } else {
+                    // Controllable fees go to their specific bucket type
+                    switch (fee.feeType) {
+                        case 'DISC_RATE':
+                            currentState.feeBuckets.discRate += fee.amount;
+                            break;
+                        case 'PER_TRANS':
+                            currentState.feeBuckets.perTrans += fee.amount;
+                            break;
+                        case 'PER_AUTH':
+                            currentState.feeBuckets.perAuth += fee.amount;
+                            break;
+                        case 'BATCH_FEE':
+                            currentState.feeBuckets.batchFee += fee.amount;
+                            break;
+                        case 'MONTHLY_FEE':
+                            currentState.feeBuckets.monthlyFee += fee.amount;
+                            break;
+                        case 'OTHER_FEE':
+                        default:
+                            currentState.feeBuckets.otherFee += fee.amount;
+                            break;
+                    }
+                }
+            }
+
+            console.log('Fee buckets calculated:', currentState.feeBuckets);
+
             // NEW: Run advanced analysis
             analyzeCardTypeBreakdown();
             detectDowngrades();
@@ -3495,6 +3735,41 @@ PCI COMPLIANCE              $19.95
                 '$' + currentState.passThroughTotal.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
             // Note: Hidden fees count is updated in detectHiddenFees() to ensure proper timing
+
+            // NEW: Update fee bucket display
+            updateFeeBucketDisplay();
+        }
+
+        function updateFeeBucketDisplay() {
+            const buckets = currentState.feeBuckets || {};
+            const format = (val) => '$' + (val || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+            // Update individual bucket displays
+            const bucketDiscRate = document.getElementById('bucketDiscRate');
+            const bucketPerTrans = document.getElementById('bucketPerTrans');
+            const bucketPerAuth = document.getElementById('bucketPerAuth');
+            const bucketBatchFee = document.getElementById('bucketBatchFee');
+            const bucketMonthlyFee = document.getElementById('bucketMonthlyFee');
+            const bucketOtherFee = document.getElementById('bucketOtherFee');
+            const bucketPassThrough = document.getElementById('bucketPassThrough');
+
+            if (bucketDiscRate) bucketDiscRate.textContent = format(buckets.discRate);
+            if (bucketPerTrans) bucketPerTrans.textContent = format(buckets.perTrans);
+            if (bucketPerAuth) bucketPerAuth.textContent = format(buckets.perAuth);
+            if (bucketBatchFee) bucketBatchFee.textContent = format(buckets.batchFee);
+            if (bucketMonthlyFee) bucketMonthlyFee.textContent = format(buckets.monthlyFee);
+            if (bucketOtherFee) bucketOtherFee.textContent = format(buckets.otherFee);
+            if (bucketPassThrough) bucketPassThrough.textContent = format(buckets.passThrough);
+
+            // Calculate totals
+            const totalControllable = (buckets.discRate || 0) + (buckets.perTrans || 0) + (buckets.perAuth || 0) +
+                                       (buckets.batchFee || 0) + (buckets.monthlyFee || 0) + (buckets.otherFee || 0);
+
+            const bucketTotalControllable = document.getElementById('bucketTotalControllable');
+            const bucketTotalPassThrough = document.getElementById('bucketTotalPassThrough');
+
+            if (bucketTotalControllable) bucketTotalControllable.textContent = format(totalControllable);
+            if (bucketTotalPassThrough) bucketTotalPassThrough.textContent = format(buckets.passThrough);
         }
 
         function renderFeeTable() {
@@ -4665,12 +4940,28 @@ PCI COMPLIANCE              $19.95
             const gpiPerTxn = parseFloat(document.getElementById('gpiPerTxn').value) || 0.10;
             const gpiMonthlyFee = parseFloat(document.getElementById('gpiMonthlyFee').value) || 0;
 
-            // Estimate fee breakdown from controllable fees
-            // Using typical merchant processing fee distribution
-            const discountFeeCurrent = controllable * 0.55;  // ~55% is discount/markup
-            const perItemFeeCurrent = controllable * 0.25;   // ~25% is per-item
-            const monthlyFeeCurrent = controllable * 0.12;   // ~12% is monthly
-            const otherFeeCurrent = controllable * 0.08;     // ~8% is other/misc
+            // Use ACTUAL fee bucket values if available, otherwise estimate
+            const buckets = currentState.feeBuckets || {};
+            const hasBucketData = buckets.discRate > 0 || buckets.perTrans > 0 || buckets.perAuth > 0 ||
+                                  buckets.batchFee > 0 || buckets.monthlyFee > 0 || buckets.otherFee > 0;
+
+            let discountFeeCurrent, perItemFeeCurrent, monthlyFeeCurrent, otherFeeCurrent;
+
+            if (hasBucketData) {
+                // Use actual extracted bucket values
+                discountFeeCurrent = buckets.discRate || 0;
+                perItemFeeCurrent = (buckets.perTrans || 0) + (buckets.perAuth || 0) + (buckets.batchFee || 0);
+                monthlyFeeCurrent = buckets.monthlyFee || 0;
+                otherFeeCurrent = buckets.otherFee || 0;
+                console.log('Using ACTUAL fee buckets:', { discountFeeCurrent, perItemFeeCurrent, monthlyFeeCurrent, otherFeeCurrent });
+            } else {
+                // Fallback: estimate from controllable total
+                discountFeeCurrent = controllable * 0.55;
+                perItemFeeCurrent = controllable * 0.25;
+                monthlyFeeCurrent = controllable * 0.12;
+                otherFeeCurrent = controllable * 0.08;
+                console.log('Using ESTIMATED fee breakdown (no bucket data)');
+            }
 
             // GPI fees calculation
             const gpiMarkupFees = volume * (gpiMarkupBps / 10000);
