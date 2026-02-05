@@ -1443,9 +1443,378 @@ PCI COMPLIANCE              $19.95
 
     <script>
         // ============================================================
-        // GPI FEE ANALYZER v6.0 - THE UNIVERSE'S BEST
+        // GPI FEE ANALYZER v8.5 - KB-DRIVEN EDITION
         // ============================================================
 
+        // ============================================================
+        // KB FEE CATEGORIZER MODULE (v2.0)
+        // Knowledge-base driven fee categorization engine
+        // ============================================================
+        const KBFeeCategorizer = (function() {
+            'use strict';
+
+            const BUCKETS = {
+                DISC_RATE: 'DISC_RATE',
+                PER_TRANS: 'PER_TRANS',
+                MONTHLY: 'MONTHLY',
+                OTHER: 'OTHER',
+                PASS_THROUGH: 'PASS_THROUGH',
+                FLAGGED: 'FLAGGED'
+            };
+
+            const VALIDATION_RANGES = {
+                assessments: {
+                    visa: { min: 0.0013, max: 0.0016, label: 'Visa Assessment' },
+                    mastercard: { min: 0.0013, max: 0.0016, label: 'MC Assessment' },
+                    discover: { min: 0.0010, max: 0.0015, label: 'Discover Assessment' },
+                    amex: { min: 0.0015, max: 0.0020, label: 'Amex Assessment' }
+                },
+                networkAccess: {
+                    nabu: { min: 0.0155, max: 0.0200, label: 'NABU' },
+                    apf: { min: 0.0155, max: 0.0200, label: 'APF' },
+                    accessFee: { min: 0.00, max: 0.01, label: 'Access Fee' },
+                    baseII: { min: 0.002, max: 0.005, label: 'Base II' }
+                },
+                perAuth: {
+                    authFee: { min: 0.05, max: 0.15, label: 'Auth Fee' },
+                    avs: { min: 0.00, max: 0.05, label: 'AVS' }
+                }
+            };
+
+            // PASS-THROUGH keywords
+            const PASS_THROUGH_KEYWORDS = {
+                interchange: [
+                    /^VI[\s-]/i, /^VS[\s-]/i, /^MC[\s-]/i, /^DS[\s-]/i, /^DSCVR[\s-]/i,
+                    /MERIT\s*(I|II|III|ELITE)/i,
+                    /INTERCHANGE(?!\s*(MANAGEMENT|OPTIMIZATION|PLUS))/i,
+                    /CPS\s*\/?\s*(RETAIL|RESTAURANT|CARD|SMALL)/i,
+                    /REGULATED\s*(DB|CR|DEBIT|CREDIT)/i,
+                    /WORLD\s*ELITE/i, /SIGNATURE\s*(PREFERRED|INFINITE)/i,
+                    /ENHANCED\s*MERIT/i, /HIGH\s*VAL(UE)?/i
+                ],
+                assessment: [
+                    /ASSESSMENT\s*FEE/i,
+                    /DUES\s*[&]\s*ASSESSMENTS?/i,
+                    /DUE\/ASMT/i,
+                    /^(VISA|MC|MASTERCARD|DISCOVER|AMEX)\s*ASSESSMENT/i
+                ],
+                network: [
+                    /\bNABU\b/i, /\bAPF\b/i, /\bFANF\b/i,
+                    /BASE\s*II/i, /KILOBYTE/i, /FILE\s*TRANSMISSION/i,
+                    /TRANSACTION\s*INTEGRITY/i,
+                    /ACQUIRER\s*(PROCESSING|PROC)\s*FEE/i,
+                    /NETWORK\s*ACCESS\s*(AUTH|BRAND)/i,
+                    /CROSS[\s-]?BORDER/i,
+                    /INT(ERN)?L?\s*(SERVICE|ACQUIRER|SUPPORT)\s*FEE/i,
+                    /MISUSE\s*(OF\s*)?AUTH/i
+                ],
+                pinDebit: [
+                    /\bSTAR\b(?!\s*NE\s*PREFER)/i, /\bPULSE\b/i, /\bNYCE\b/i,
+                    /\bACCEL\b/i, /\bMAESTRO\b/i, /\bINTERLINK\b/i,
+                    /\bSHAZAM\b/i, /\bJEANIE\b/i, /\bAFFN\b/i
+                ]
+            };
+
+            // CONTROLLABLE keywords
+            const CONTROLLABLE_KEYWORDS = {
+                discRate: [
+                    /DISC(OUNT)?\s*(RATE|FEE)/i,
+                    /SALES\s*DISC(OUNT)?/i,
+                    /DEBIT\s*SALES\s*DISC/i,
+                    /DAILY\s*DISCOUNT/i, /BASE\s*RATE/i, /MARKUP/i,
+                    /BASIS\s*POINT/i, /\bBPS\b/i,
+                    /MONTHLY\s*ADVANTAGE/i,
+                    /QUAL(IFIED)?\s*RATE/i,
+                    /MID[\s-]?QUAL/i, /NON[\s-]?QUAL/i,
+                    /DISC\s*RATE\s*TIMES/i
+                ],
+                perTrans: [
+                    /PER\s*(TRAN(S|SACTION)?|ITEM|AUTH(ORIZATION)?)/i,
+                    /P\/I\b/i, /ITEM\s*RATE/i,
+                    /BATCH\s*SETTL(E|EMENT)/i,
+                    /PROCESSOR\s*FEE/i,
+                    /\bIP\s*FEE\b/i, /\bSSL\b/i, /DATAWIRE/i, /SETTLED/i,
+                    /TRANSACTIONS?\s*AT\s*[\d\.]+/i
+                ],
+                monthly: [
+                    /PCI\s*(NON[\s-]?)?(COMPLIANCE|VALIDATION)/i,
+                    /STATEMENT\s*FEE/i,
+                    /MONTHLY\s*(FEE|SERVICE|ACCOUNT)/i,
+                    /ACCOUNT\s*(FEE|MAINTENANCE)/i,
+                    /GATEWAY\s*FEE/i, /PLATFORM\s*FEE/i,
+                    /OMNISHIELD/i, /CLOVER\s*SECURITY/i,
+                    /SECURE\s*FEE/i, /REG(ULATORY)?\s*FEE/i,
+                    /BREACH\s*COVERAGE/i, /INSIGHTS/i, /ANALYTICS/i,
+                    /BANK\s*SERVICE/i, /MINIMUM\s*(FEE|PROCESSING)/i,
+                    /LOCATION\s*FEE/i
+                ],
+                other: [
+                    /CHARGEBACK/i, /RETRIEVAL/i,
+                    /ACH\s*(REJECT|RETURN)/i, /\bNSF\b/i, /WIRE\s*FEE/i,
+                    /EARLY\s*TERMINATION/i, /CANCELLATION/i,
+                    /SETUP\s*FEE/i, /PROGRAMMING/i, /TRAINING/i,
+                    /INGENICO/i, /VERIFONE/i, /PAX\b/i,
+                    /HARDWARE/i, /TERMINAL/i, /EQUIPMENT/i
+                ]
+            };
+
+            // Hidden fee patterns
+            const HIDDEN_FEE_PATTERNS = [
+                { pattern: /PCI\s*NON[\s-]?VALIDATION/i, note: 'Should be $0 if compliant', bucket: BUCKETS.MONTHLY },
+                { pattern: /REGULATORY\s*PRODUCT/i, note: 'Processor-invented fee', bucket: BUCKETS.MONTHLY },
+                { pattern: /NETWORK\s*[&]\s*PROCESSOR\s*ACCESS/i, note: 'Markup disguised as network', bucket: BUCKETS.DISC_RATE },
+                { pattern: /PROCESSOR\s*TRANSACTION\s*RISK/i, note: 'Pure processor profit', bucket: BUCKETS.PER_TRANS },
+                { pattern: /SERVICE\s*[&]\s*REGULATORY\s*MANDATE/i, note: 'Disguised markup', bucket: BUCKETS.MONTHLY },
+                { pattern: /TECHNOLOGY\s*ASSESSMENT/i, note: 'Processor-invented fee', bucket: BUCKETS.MONTHLY },
+                { pattern: /SECURITY\s*ASSESSMENT/i, note: 'Often negotiable', bucket: BUCKETS.MONTHLY },
+                { pattern: /DIGITAL\s*(ENABLEMENT|INVESTMENT)/i, note: 'Processor markup', bucket: BUCKETS.MONTHLY }
+            ];
+
+            // Processor-specific rules
+            const PROCESSOR_RULES = {
+                clover: {
+                    identifiers: [/clover/i, /businesstrack/i, /fiserv/i],
+                    sectionRules: {
+                        'interchange charges': BUCKETS.PASS_THROUGH,
+                        'program fees': BUCKETS.PASS_THROUGH,
+                        'service charges': BUCKETS.DISC_RATE,
+                        'fees': BUCKETS.PER_TRANS
+                    }
+                },
+                worldpay: {
+                    identifiers: [/worldpay/i, /vantiv/i, /\bfis\b/i],
+                    sectionRules: {
+                        'processing fees': BUCKETS.DISC_RATE,
+                        'interchange': BUCKETS.PASS_THROUGH
+                    }
+                },
+                heartland: {
+                    identifiers: [/heartland/i, /passport/i, /global\s*payments/i],
+                    sectionRules: {
+                        'pass-thru': BUCKETS.PASS_THROUGH,
+                        'hps processing': BUCKETS.DISC_RATE
+                    }
+                },
+                paysafe: {
+                    identifiers: [/paysafe/i, /riverside/i, /ipayment/i],
+                    exactMatches: {
+                        'DISC1': BUCKETS.DISC_RATE,
+                        'DISC 1': BUCKETS.DISC_RATE,
+                        'DATAWIRE': BUCKETS.MONTHLY,
+                        'INTERCHANGE': BUCKETS.PASS_THROUGH,
+                        'DUES&ASSESSMENTS': BUCKETS.PASS_THROUGH
+                    }
+                }
+            };
+
+            // Conditional rules
+            const CONDITIONAL_RULES = [
+                {
+                    keywords: [/ACCESS\s*FEE/i],
+                    condition: (fee) => {
+                        if (fee.perTransRate && fee.perTransRate < 0.01) {
+                            return { bucket: BUCKETS.PASS_THROUGH, confidence: 0.80 };
+                        }
+                        return { bucket: BUCKETS.FLAGGED, reason: 'Access fee > $0.01 - may be markup' };
+                    }
+                },
+                {
+                    keywords: [/PROCESSING\s*FEE$/i],
+                    condition: (fee, context) => {
+                        if (/ACQUIRER/i.test(fee.name)) {
+                            return { bucket: BUCKETS.PASS_THROUGH, confidence: 0.90 };
+                        }
+                        return { bucket: BUCKETS.DISC_RATE, confidence: 0.80 };
+                    }
+                }
+            ];
+
+            function matchesPatterns(name, patterns) {
+                return patterns.some(p => p.test(name));
+            }
+
+            function detectProcessor(statementText) {
+                for (const [processor, rules] of Object.entries(PROCESSOR_RULES)) {
+                    if (rules.identifiers.some(p => p.test(statementText))) {
+                        return processor;
+                    }
+                }
+                return null;
+            }
+
+            function categorizeFee(fee, context = {}) {
+                const name = (fee.name || '').toUpperCase().trim();
+                const processor = context.processor;
+                const section = context.section?.toLowerCase();
+
+                let result = {
+                    bucket: BUCKETS.FLAGGED,
+                    confidence: 0,
+                    reason: null,
+                    isHidden: false,
+                    hiddenNote: null
+                };
+
+                // STEP 1: Processor-specific section rules
+                if (processor && PROCESSOR_RULES[processor]?.sectionRules && section) {
+                    const sectionBucket = PROCESSOR_RULES[processor].sectionRules[section];
+                    if (sectionBucket) {
+                        result.bucket = sectionBucket;
+                        result.confidence = 0.95;
+                        result.reason = `Processor section rule: ${section}`;
+                        return result;
+                    }
+                }
+
+                // STEP 2: Processor-specific exact matches
+                if (processor && PROCESSOR_RULES[processor]?.exactMatches) {
+                    const exactMatch = PROCESSOR_RULES[processor].exactMatches[name];
+                    if (exactMatch) {
+                        result.bucket = exactMatch;
+                        result.confidence = 0.95;
+                        result.reason = 'Processor exact match';
+                        return result;
+                    }
+                }
+
+                // STEP 3: Hidden fee patterns
+                for (const hidden of HIDDEN_FEE_PATTERNS) {
+                    if (hidden.pattern.test(name)) {
+                        result.bucket = hidden.bucket;
+                        result.confidence = 0.90;
+                        result.isHidden = true;
+                        result.hiddenNote = hidden.note;
+                        result.reason = `Hidden fee: ${hidden.note}`;
+                        return result;
+                    }
+                }
+
+                // STEP 4: Controllable discount keywords FIRST
+                if (matchesPatterns(name, CONTROLLABLE_KEYWORDS.discRate)) {
+                    result.bucket = BUCKETS.DISC_RATE;
+                    result.confidence = 0.90;
+                    result.reason = 'Discount rate pattern';
+                    return result;
+                }
+
+                // STEP 5: Pass-through keywords
+                if (matchesPatterns(name, PASS_THROUGH_KEYWORDS.interchange)) {
+                    result.bucket = BUCKETS.PASS_THROUGH;
+                    result.confidence = 0.95;
+                    result.reason = 'Interchange pattern';
+                    return result;
+                }
+                if (matchesPatterns(name, PASS_THROUGH_KEYWORDS.assessment)) {
+                    result.bucket = BUCKETS.PASS_THROUGH;
+                    result.confidence = 0.95;
+                    result.reason = 'Assessment pattern';
+                    return result;
+                }
+                if (matchesPatterns(name, PASS_THROUGH_KEYWORDS.network)) {
+                    result.bucket = BUCKETS.PASS_THROUGH;
+                    result.confidence = 0.90;
+                    result.reason = 'Network fee pattern';
+                    return result;
+                }
+                if (matchesPatterns(name, PASS_THROUGH_KEYWORDS.pinDebit)) {
+                    result.bucket = BUCKETS.PASS_THROUGH;
+                    result.confidence = 0.90;
+                    result.reason = 'PIN debit network';
+                    return result;
+                }
+
+                // STEP 6: Other controllable keywords
+                if (matchesPatterns(name, CONTROLLABLE_KEYWORDS.perTrans)) {
+                    result.bucket = BUCKETS.PER_TRANS;
+                    result.confidence = 0.90;
+                    result.reason = 'Per-transaction pattern';
+                    return result;
+                }
+                if (matchesPatterns(name, CONTROLLABLE_KEYWORDS.monthly)) {
+                    result.bucket = BUCKETS.MONTHLY;
+                    result.confidence = 0.90;
+                    result.reason = 'Monthly fee pattern';
+                    return result;
+                }
+                if (matchesPatterns(name, CONTROLLABLE_KEYWORDS.other)) {
+                    result.bucket = BUCKETS.OTHER;
+                    result.confidence = 0.85;
+                    result.reason = 'Other controllable pattern';
+                    return result;
+                }
+
+                // STEP 7: Conditional rules
+                for (const rule of CONDITIONAL_RULES) {
+                    if (rule.keywords.some(k => k.test(name))) {
+                        const condResult = rule.condition(fee, context);
+                        if (condResult) {
+                            result.bucket = condResult.bucket;
+                            result.confidence = condResult.confidence || 0.75;
+                            result.reason = condResult.reason || 'Conditional rule';
+                            return result;
+                        }
+                    }
+                }
+
+                // STEP 8: Default to FLAGGED
+                result.bucket = BUCKETS.FLAGGED;
+                result.confidence = 0;
+                result.reason = 'Unknown fee - requires review';
+                return result;
+            }
+
+            function validateFee(fee, categorization) {
+                const name = (fee.name || '').toUpperCase();
+                const perTransRate = fee.perTransRate;
+                const ratePercent = fee.ratePercent;
+                const anomalies = [];
+
+                // Validate assessments
+                if (/ASSESSMENT/i.test(name) && ratePercent) {
+                    let expectedRange = null;
+                    if (/VISA/i.test(name)) expectedRange = VALIDATION_RANGES.assessments.visa;
+                    else if (/MC|MASTERCARD/i.test(name)) expectedRange = VALIDATION_RANGES.assessments.mastercard;
+
+                    if (expectedRange && (ratePercent < expectedRange.min || ratePercent > expectedRange.max)) {
+                        anomalies.push({
+                            type: 'OUT_OF_RANGE',
+                            message: `${expectedRange.label} rate outside expected range`,
+                            severity: 'warning'
+                        });
+                    }
+                }
+
+                // Validate access fees
+                if (/ACCESS\s*FEE/i.test(name) && perTransRate && perTransRate > 0.01) {
+                    anomalies.push({
+                        type: 'POSSIBLE_MARKUP',
+                        message: `Access fee $${perTransRate.toFixed(4)}/trans exceeds typical rates`,
+                        severity: 'flag'
+                    });
+                }
+
+                // Validate auth fees
+                if (/AUTH\s*FEE/i.test(name) && perTransRate && perTransRate > 0.15) {
+                    anomalies.push({
+                        type: 'EXCESSIVE',
+                        message: `Auth fee $${perTransRate.toFixed(4)}/trans exceeds typical range`,
+                        severity: 'warning'
+                    });
+                }
+
+                return anomalies;
+            }
+
+            return {
+                BUCKETS,
+                VALIDATION_RANGES,
+                categorizeFee,
+                validateFee,
+                detectProcessor
+            };
+        })();
+
+        // ============================================================
         // Global State
         let currentState = {
             merchantName: '',
@@ -2502,6 +2871,43 @@ PCI COMPLIANCE              $19.95
             // Parse and categorize fees
             currentState.fees = parseFees(feeText);
 
+            // ============================================================
+            // FEE VALIDATION (Feb 2026): Sanity check extracted fees
+            // If extracted fees sum is MUCH larger than statement total,
+            // we likely captured volume amounts instead of fees
+            // ============================================================
+            const extractedFeeSum = currentState.fees.reduce((sum, f) => sum + f.amount, 0);
+            const statementTotalFees = currentState.totalFees || extracted?.fees || 0;
+
+            // If we have a statement total and extracted sum is way off, filter aggressively
+            if (statementTotalFees > 0 && extractedFeeSum > statementTotalFees * 5) {
+                console.warn(`Fee extraction anomaly detected: Extracted $${extractedFeeSum.toFixed(2)} but statement shows $${statementTotalFees.toFixed(2)}`);
+                console.warn('Applying aggressive filtering to remove likely volume amounts...');
+
+                // Filter out fees that are larger than the total statement fees
+                // (individual fees can't exceed the total)
+                currentState.fees = currentState.fees.filter(fee => {
+                    if (fee.amount > statementTotalFees) {
+                        console.warn(`Removing anomalous fee: ${fee.name} $${fee.amount} (exceeds total fees)`);
+                        return false;
+                    }
+                    return true;
+                });
+
+                // Re-check: if still way off, only keep fees under 5% of volume
+                const reFilteredSum = currentState.fees.reduce((sum, f) => sum + f.amount, 0);
+                if (reFilteredSum > statementTotalFees * 3 && currentState.totalVolume > 0) {
+                    const maxReasonableFee = currentState.totalVolume * 0.05; // 5% max
+                    currentState.fees = currentState.fees.filter(fee => {
+                        if (fee.amount > maxReasonableFee) {
+                            console.warn(`Removing likely volume amount: ${fee.name} $${fee.amount}`);
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+            }
+
             // If we still don't have totalFees, sum up parsed fees as fallback
             if (currentState.totalFees === 0 && currentState.fees.length > 0) {
                 const summedFees = currentState.fees.reduce((sum, f) => sum + f.amount, 0);
@@ -3050,7 +3456,115 @@ PCI COMPLIANCE              $19.95
                 let match;
                 const testLine = line; // Keep commas for initial processing
 
-                // Try each fee pattern
+                // ============================================================
+                // FIX (Feb 2026): Clover/Fiserv/BusinessTrack Fee Extraction
+                // These statements have format: "FEE NAME    Type    -$XX.XX"
+                // Critical: Extract NEGATIVE amount at END, not volumes in middle
+                // Example: "MASTERCARD ASSESSMENT FEE 0.0013 TIMES $40825.32    Interchange charges    -$53.07"
+                // The $40825.32 is VOLUME, the -$53.07 is the ACTUAL FEE
+                // ============================================================
+
+                // PRIORITY 1: Lines ending with -$XX.XX (negative fee amounts)
+                // This catches Clover/BusinessTrack format with fee types
+                // Also CAPTURES the fee type for direct categorization!
+                const negativeEndPattern = /^[\s]*(.+?)\s+(Interchange charges|Service charges|Program Fees|Fees)\s+-\$([\d,]+\.?\d*)[\s]*$/i;
+                const negativeMatch = testLine.match(negativeEndPattern);
+
+                if (negativeMatch) {
+                    let name = negativeMatch[1].trim();
+                    const feeTypeLabel = negativeMatch[2].toLowerCase(); // "interchange charges", "service charges", etc.
+                    const amount = parseFloat(negativeMatch[3].replace(/,/g, ''));
+
+                    // Clean embedded calculation text (e.g., "0.0013 TIMES $40825.32")
+                    name = name.replace(/\d+\.?\d*\s*(?:TIMES|X|@)\s*\$?[\d,]+\.?\d*/gi, '').trim();
+                    // Clean "1384 TRANSACTIONS AT 0.0315" patterns
+                    name = name.replace(/\d+\s+TRANSACTIONS?\s+AT\s+[\d\.]+/gi, '').trim();
+                    // Clean "0.0006 DISC RATE TIMES $28415.02" patterns (full pattern with amount)
+                    name = name.replace(/\d+\.?\d*\s+DISC\s+RATE\s+TIMES\s+\$?[\d,]+\.?\d*/gi, '').trim();
+                    // Also clean just "0.0006 DISC RATE TIMES" without amount
+                    name = name.replace(/\d+\.?\d*\s+DISC\s+RATE\s+TIMES/gi, '').trim();
+                    // Clean trailing separators
+                    name = name.replace(/[\s\.\-:]+$/, '').trim();
+                    name = name.replace(/\s+/g, ' ');
+
+                    if (name.length > 2 && amount > 0 && amount < 10000) {
+                        // USE the fee type label for DIRECT categorization (highest confidence!)
+                        // "Interchange charges" and "Program Fees" = PASS_THROUGH
+                        // "Service charges" and "Fees" = CONTROLLABLE (processor markup)
+                        let directCategory = null;
+                        let directConfidence = 0.99;
+
+                        if (feeTypeLabel.includes('interchange') || feeTypeLabel.includes('program')) {
+                            directCategory = 'PASS_THROUGH';
+                        } else if (feeTypeLabel.includes('service') || feeTypeLabel === 'fees') {
+                            // "Fees" section in Clover statements = processor markup = CONTROLLABLE
+                            directCategory = 'CONTROLLABLE';
+                        }
+
+                        // Extract per-transaction rate if present (e.g., "1384 TRANSACTIONS AT 0.063")
+                        let perTransRate = null;
+                        let transactionCount = null;
+                        const transAtMatch = testLine.match(/(\d+)\s+TRANSACTIONS?\s+AT\s+([\d\.]+)/i);
+                        if (transAtMatch) {
+                            transactionCount = parseInt(transAtMatch[1]);
+                            perTransRate = parseFloat(transAtMatch[2]);
+                        }
+
+                        // Use KB categorizer for fee categorization
+                        let kbContext = { processor: currentState.processor };
+                        if (feeTypeLabel) {
+                            kbContext.section = feeTypeLabel;
+                        }
+                        const kbResult = KBFeeCategorizer.categorizeFee({ name: name, amount: amount, perTransRate: perTransRate }, kbContext);
+
+                        // Map KB bucket to legacy category (CONTROLLABLE vs PASS_THROUGH)
+                        const category = directCategory
+                            ? { category: directCategory, confidence: directConfidence, source: 'statement-section' }
+                            : {
+                                category: kbResult.bucket === 'PASS_THROUGH' ? 'PASS_THROUGH' : 'CONTROLLABLE',
+                                confidence: kbResult.confidence,
+                                source: kbResult.reason,
+                                isHidden: kbResult.isHidden,
+                                hiddenInfo: kbResult.hiddenNote
+                            };
+
+                        // Use KB bucket as feeType for bucket breakdown
+                        const feeType = kbResult.bucket;
+                        const feeObj = {
+                            name: name.toUpperCase(),
+                            amount: amount,
+                            category: category.category,
+                            feeType: feeType,
+                            confidence: category.confidence,
+                            isHiddenFee: category.isHidden || false,
+                            hiddenInfo: category.hiddenInfo,
+                            categorizationSource: category.source || 'clover-negative',
+                            matchedPattern: category.matchedPattern || null
+                        };
+
+                        // Add per-transaction details if extracted
+                        if (perTransRate !== null) {
+                            feeObj.perTransRate = perTransRate;
+                            feeObj.transactionCount = transactionCount;
+                            feeObj.rateNote = `$${perTransRate.toFixed(4)} × ${transactionCount} transactions`;
+                        }
+
+                        fees.push(feeObj);
+                        continue; // Skip generic patterns for this line
+                    }
+                }
+
+                // PRIORITY 2: Skip lines with TIMES/TRANSACTIONS AT calculations entirely
+                // These lines have volume amounts embedded that generic patterns will incorrectly match
+                if (/\d+\.?\d*\s*(?:TIMES|X)\s*\$[\d,]+/i.test(testLine) ||
+                    /\d+\s+TRANSACTIONS?\s+AT\s+[\d\.]+/i.test(testLine)) {
+                    // If line has embedded calculation BUT doesn't end with -$, skip entirely
+                    if (!/-\$[\d,]+\.?\d*[\s]*$/i.test(testLine)) {
+                        continue;
+                    }
+                }
+
+                // Try each fee pattern (generic fallback)
                 for (const feePattern of feePatterns) {
                     feePattern.lastIndex = 0;
                     while ((match = feePattern.exec(testLine)) !== null) {
@@ -3061,27 +3575,34 @@ PCI COMPLIANCE              $19.95
                         name = name.replace(/[\s\.\-:]+$/, '').trim(); // Remove trailing separators
                         name = name.replace(/\s+/g, ' '); // Normalize whitespace
 
-                        if (name.length > 2 && amount > 0 && !isNaN(amount)) {
-                            // Skip if this looks like a volume/total (too large for a fee)
-                            if (amount > 50000) continue;
+                        // ============================================================
+                        // FIX: Skip lines that look like volume/calculation descriptions
+                        // ============================================================
+                        // Skip if the line contains "TIMES" or "X" (calculation format)
+                        if (/\d+\.?\d*\s*(?:TIMES|X)\s*\$/i.test(testLine)) continue;
+                        // Skip if amount matches a volume pattern in the line
+                        if (testLine.includes('$' + match[2]) && /TIMES|TRANSACTIONS?\s+AT/i.test(testLine)) continue;
+                        // Skip if this looks like a volume amount (typical fee max is ~$5000)
+                        if (amount > 5000) continue;
+                        // Skip if amount is likely a volume (close to round thousands)
+                        if (amount > 1000 && Math.abs(amount - Math.round(amount/1000)*1000) < 100) continue;
 
-                            // Use enhanced Universal Fee Recognition Engine
-                            const category = universalCategorizeFee(name, {
-                                lineText: testLine,
-                                amount: amount
-                            });
-                            const feeType = determineFeeType(name);
+                        if (name.length > 2 && amount > 0 && !isNaN(amount)) {
+                            // Use KB Fee Categorizer
+                            const kbResult = KBFeeCategorizer.categorizeFee(
+                                { name: name, amount: amount },
+                                { processor: currentState.processor }
+                            );
                             fees.push({
                                 name: name.toUpperCase(),
                                 amount: amount,
-                                category: category.category,
-                                feeType: feeType,
-                                confidence: category.confidence,
-                                isHiddenFee: category.isHidden || false,
-                                hiddenInfo: category.hiddenInfo,
-                                // NEW: Track categorization source for UI feedback
-                                categorizationSource: category.source || 'pattern',
-                                matchedPattern: category.matchedPattern || null
+                                category: kbResult.bucket === 'PASS_THROUGH' ? 'PASS_THROUGH' : 'CONTROLLABLE',
+                                feeType: kbResult.bucket,
+                                confidence: kbResult.confidence,
+                                isHiddenFee: kbResult.isHidden || false,
+                                hiddenInfo: kbResult.hiddenNote,
+                                categorizationSource: kbResult.reason || 'kb-pattern',
+                                matchedPattern: null
                             });
                         }
                     }
@@ -3097,24 +3618,23 @@ PCI COMPLIANCE              $19.95
 
                 name = name.replace(/[\s\.\-:]+$/, '').trim();
 
-                if (name.length > 2 && amount > 0 && amount < 50000 && !isNaN(amount)) {
-                    // Use enhanced Universal Fee Recognition Engine
-                    const category = universalCategorizeFee(name, {
-                        lineText: text,
-                        amount: amount
-                    });
-                    const feeType = determineFeeType(name);
+                // Skip unrealistic fee amounts (max reasonable fee ~$5000)
+                if (name.length > 2 && amount > 0 && amount < 5000 && !isNaN(amount)) {
+                    // Use KB Fee Categorizer
+                    const kbResult = KBFeeCategorizer.categorizeFee(
+                        { name: name, amount: amount },
+                        { processor: currentState.processor }
+                    );
                     fees.push({
                         name: name.toUpperCase(),
                         amount: amount,
-                        category: category.category,
-                        feeType: feeType,
-                        confidence: category.confidence,
-                        isHiddenFee: category.isHidden || false,
-                        hiddenInfo: category.hiddenInfo,
-                        // NEW: Track categorization source for UI feedback
-                        categorizationSource: category.source || 'pattern',
-                        matchedPattern: category.matchedPattern || null
+                        category: kbResult.bucket === 'PASS_THROUGH' ? 'PASS_THROUGH' : 'CONTROLLABLE',
+                        feeType: kbResult.bucket,
+                        confidence: kbResult.confidence,
+                        isHiddenFee: kbResult.isHidden || false,
+                        hiddenInfo: kbResult.hiddenNote,
+                        categorizationSource: kbResult.reason || 'kb-multiline',
+                        matchedPattern: null
                     });
                 }
             }
@@ -4950,44 +5470,72 @@ PCI COMPLIANCE              $19.95
                 currentState.effectiveRate = (currentState.totalFees / currentState.totalVolume * 100);
             }
 
-            // NEW: Calculate fee bucket totals
+            // NEW: Calculate fee bucket totals using KB categorizer buckets
             currentState.feeBuckets = {
-                discRate: 0,
-                perTrans: 0,
-                perAuth: 0,
-                batchFee: 0,
-                monthlyFee: 0,
-                otherFee: 0,
-                passThrough: 0
+                discRate: 0,      // DISC_RATE bucket
+                perTrans: 0,      // PER_TRANS bucket (includes per-auth, batch)
+                monthlyFee: 0,    // MONTHLY bucket
+                otherFee: 0,      // OTHER bucket
+                passThrough: 0,   // PASS_THROUGH bucket
+                flagged: 0        // FLAGGED bucket (needs review)
             };
 
             for (const fee of currentState.fees) {
-                // Pass-through goes to its own bucket regardless of feeType
-                if (fee.category === 'PASS_THROUGH') {
-                    currentState.feeBuckets.passThrough += fee.amount;
-                } else {
-                    // Controllable fees go to their specific bucket type
-                    switch (fee.feeType) {
-                        case 'DISC_RATE':
-                            currentState.feeBuckets.discRate += fee.amount;
-                            break;
-                        case 'PER_TRANS':
-                            currentState.feeBuckets.perTrans += fee.amount;
-                            break;
-                        case 'PER_AUTH':
-                            currentState.feeBuckets.perAuth += fee.amount;
-                            break;
-                        case 'BATCH_FEE':
-                            currentState.feeBuckets.batchFee += fee.amount;
-                            break;
-                        case 'MONTHLY_FEE':
-                            currentState.feeBuckets.monthlyFee += fee.amount;
-                            break;
-                        case 'OTHER_FEE':
-                        default:
+                // Map KB buckets to feeBuckets
+                switch (fee.feeType) {
+                    case 'DISC_RATE':
+                        currentState.feeBuckets.discRate += fee.amount;
+                        break;
+                    case 'PER_TRANS':
+                        currentState.feeBuckets.perTrans += fee.amount;
+                        break;
+                    case 'MONTHLY':
+                        currentState.feeBuckets.monthlyFee += fee.amount;
+                        break;
+                    case 'OTHER':
+                        currentState.feeBuckets.otherFee += fee.amount;
+                        break;
+                    case 'PASS_THROUGH':
+                        currentState.feeBuckets.passThrough += fee.amount;
+                        break;
+                    case 'FLAGGED':
+                        currentState.feeBuckets.flagged += fee.amount;
+                        break;
+                    default:
+                        // Fallback based on category
+                        if (fee.category === 'PASS_THROUGH') {
+                            currentState.feeBuckets.passThrough += fee.amount;
+                        } else {
                             currentState.feeBuckets.otherFee += fee.amount;
-                            break;
-                    }
+                        }
+                        break;
+                }
+            }
+
+            // Calculate current processor's per-auth/per-trans rates from extracted data
+            const authFees = currentState.fees.filter(f => f.feeType === 'PER_TRANS' && f.perTransRate && /AUTH/i.test(f.name));
+            const accessFees = currentState.fees.filter(f =>
+                f.name.includes('ACCESS FEE') && f.perTransRate
+            );
+
+            if (authFees.length > 0) {
+                // Weighted average of per-auth rates
+                const totalAuthTrans = authFees.reduce((sum, f) => sum + (f.transactionCount || 0), 0);
+                const totalAuthAmount = authFees.reduce((sum, f) => sum + f.amount, 0);
+                if (totalAuthTrans > 0) {
+                    currentState.extractedPerAuthRate = totalAuthAmount / totalAuthTrans;
+                    currentState.extractedAuthTransactions = totalAuthTrans;
+                    console.log(`Extracted per-auth rate: $${currentState.extractedPerAuthRate.toFixed(4)} from ${totalAuthTrans} auth transactions`);
+                }
+            }
+
+            if (accessFees.length > 0) {
+                // Network access fees (per-transaction)
+                const totalAccessTrans = accessFees.reduce((sum, f) => sum + (f.transactionCount || 0), 0);
+                const totalAccessAmount = accessFees.reduce((sum, f) => sum + f.amount, 0);
+                if (totalAccessTrans > 0) {
+                    currentState.extractedAccessFeeRate = totalAccessAmount / totalAccessTrans;
+                    console.log(`Extracted network access fee rate: $${currentState.extractedAccessFeeRate.toFixed(4)}`);
                 }
             }
 
