@@ -835,4 +835,72 @@ NON RECEIPT OF PCI VALIDATION
 
 ---
 
+## EXCLUSION RULES SYSTEM (Phase 1 - Feb 5, 2026)
+
+### Purpose
+Exclusion rules disambiguate fees that could match BOTH CONTROLLABLE and PASS_THROUGH patterns. They run BEFORE regular pattern matching with highest priority.
+
+### Priority Order
+1. **EXCLUSION_RULES** - Highest priority, disambiguates ambiguous fees
+2. **HIDDEN_FEE_PATTERNS** - Detects disguised markups
+3. **CONTROLLABLE_PATTERNS** - Generic controllable patterns
+4. **PASSTHROUGH_PATTERNS** - Generic pass-through patterns
+5. **REVIEW** - Default for unknown fees
+
+### Key Exclusion Rules
+
+#### ACCESS FEE Disambiguation
+| Pattern | Category | Reason |
+|---------|----------|--------|
+| `VISA ACCESS FEE` | PASS_THROUGH | Card brand network fee |
+| `MASTERCARD ACCESS FEE` | PASS_THROUGH | Card brand network fee |
+| `PROCESSOR ACCESS FEE` | CONTROLLABLE | Processor markup |
+| `GATEWAY ACCESS FEE` | CONTROLLABLE | Processor markup |
+| `NETWORK & PROCESSOR ACCESS FEE` | CONTROLLABLE | Disguised markup |
+
+#### NETWORK FEE Disambiguation
+| Pattern | Category | Reason |
+|---------|----------|--------|
+| `VISA NETWORK FEE` | PASS_THROUGH | Legitimate network fee |
+| `MC NETWORK FEE` | PASS_THROUGH | Legitimate network fee |
+| `PROCESSOR NETWORK FEE` | CONTROLLABLE | Markup disguised as network |
+| `PLATFORM NETWORK FEE` | CONTROLLABLE | Markup disguised as network |
+
+#### ASSESSMENT Disambiguation
+| Pattern | Category | Reason |
+|---------|----------|--------|
+| `VISA ASSESSMENT` | PASS_THROUGH | Card brand assessment |
+| `MC ASSESSMENT` | PASS_THROUGH | Card brand assessment |
+| `RISK ASSESSMENT` | CONTROLLABLE | Processor markup |
+| `SECURITY ASSESSMENT` | CONTROLLABLE | Processor markup |
+| `TECHNOLOGY ASSESSMENT` | CONTROLLABLE | Processor markup |
+
+#### TRANSACTION FEE Disambiguation
+| Pattern | Category | Reason |
+|---------|----------|--------|
+| `VISA TRANSACTION FEE` | CONTROLLABLE | Per-brand = processor markup |
+| `MC TRANSACTION FEE` | CONTROLLABLE | Per-brand = processor markup |
+| `TRANSACTION INTEGRITY FEE` | PASS_THROUGH | Legitimate Visa fee |
+
+#### PROCESSING FEE Disambiguation
+| Pattern | Category | Reason |
+|---------|----------|--------|
+| `VISA Processing Fee` | CONTROLLABLE | WorldPay-style markup |
+| `MASTERCARD Processing Fee` | CONTROLLABLE | WorldPay-style markup |
+| `ACQUIRER PROCESSING FEE` | PASS_THROUGH | Legitimate Visa APF |
+
+#### Always PASS_THROUGH
+- `DUES & ASSESSMENTS`
+- `FANF` (Fixed Acquirer Network Fee)
+- `NABU` (Network Access and Brand Usage)
+- `INTERCHANGE` (pure label, not "management")
+
+#### Always CONTROLLABLE
+- `INTERCHANGE MANAGEMENT`
+- `INTERCHANGE OPTIMIZATION`
+- `SALES DISCOUNT`
+- `MONTHLY DISCOUNT`
+
+---
+
 *This knowledgebase compiled from analysis of 52 real merchant statements across CardConnect, WorldPay, Heartland, Paysafe, EVO/TSYS, First Data, and other processors.*

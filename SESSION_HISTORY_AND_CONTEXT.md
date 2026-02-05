@@ -310,6 +310,7 @@ git push origin main
 
 | Date | Version | Changes |
 |------|---------|---------|
+| Feb 5, 2026 | v8.5.2 | Statement deep-dive: First Data, EVO/Omega, Heartland fee patterns |
 | Feb 5, 2026 | v8.5.1 | Fixed VPS Net Sales false positive bug |
 | Feb 5, 2026 | v8.5 | 20-bot research army integration |
 | Feb 4, 2026 | v8.0 | Priority-based pattern extraction |

@@ -3639,10 +3639,238 @@ PCI COMPLIANCE              $19.95
             { pattern: /MISCELLANEOUS\s*PROCESSING/i, note: '⚠️ Vague catch-all for hidden markup', confidence: 0.90 }
         ];
 
+        // ============================================================
+        // EXCLUSION RULES - Phase 1 Pattern Recognition Enhancement
+        // These rules disambiguate fees that could match BOTH categories
+        // Priority: EXCLUSION_RULES > HIDDEN_FEE > CONTROLLABLE > PASSTHROUGH
+        // Added: February 5, 2026
+        // ============================================================
+        const EXCLUSION_RULES = [
+            // === ACCESS FEE DISAMBIGUATION ===
+            // "ACCESS FEE" alone is ambiguous - context determines category
+            {
+                pattern: /ACCESS\s*FEE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /^(VISA|MASTERCARD|MC|DISCOVER|DS|AMEX)\s*ACCESS\s*FEE/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Card brand ACCESS FEE is network fee, not processor markup'
+            },
+            {
+                pattern: /ACCESS\s*FEE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /(PROCESSOR|GATEWAY|SYSTEM|PLATFORM|NETWORK\s*&\s*PROCESSOR)\s*ACCESS\s*FEE/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Processor/Gateway ACCESS FEE is markup, not network fee'
+            },
+
+            // === NETWORK FEE DISAMBIGUATION ===
+            {
+                pattern: /NETWORK\s*FEE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /^(VISA|MC|MASTERCARD|DISCOVER)\s*NETWORK\s*FEE/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Card brand NETWORK FEE is legitimate pass-through'
+            },
+            {
+                pattern: /NETWORK\s*FEE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /(PROCESSOR|PLATFORM)\s*NETWORK\s*FEE/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Processor NETWORK FEE is markup disguised as network cost'
+            },
+
+            // === TRANSACTION FEE DISAMBIGUATION ===
+            {
+                pattern: /TRANSACTION\s*FEE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /(VISA|MC|MASTERCARD|DISCOVER|AMEX)\s*TRANSACTION\s*FEE$/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.90,
+                reason: 'Per-brand transaction fee is processor markup (networks charge via interchange)'
+            },
+            {
+                pattern: /TRANSACTION\s*FEE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /TRANSACTION\s*INTEGRITY\s*FEE/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Transaction Integrity Fee is legitimate Visa network fee'
+            },
+
+            // === ASSESSMENT DISAMBIGUATION ===
+            {
+                pattern: /ASSESSMENT/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /^(VISA|MC|MASTERCARD|DISCOVER|DS|AMEX|AXP)\s*(CREDIT|DEBIT)?\s*ASSESSMENT/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Card brand assessment is legitimate network fee'
+            },
+            {
+                pattern: /ASSESSMENT/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /(RISK|SECURITY|TECHNOLOGY|COMPLIANCE|REGULATORY|PLATFORM|SERVICE|PROCESSING)\s*ASSESSMENT/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Processor-named assessment is markup, not network fee'
+            },
+
+            // === SERVICE FEE DISAMBIGUATION ===
+            {
+                pattern: /SERVICE\s*FEE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /(MONTHLY|PLATFORM|PROCESSOR|ACCOUNT|STATEMENT)\s*SERVICE\s*FEE/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Platform/Monthly service fee is processor markup'
+            },
+            {
+                pattern: /SERVICE\s*FEE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /INTERNATIONAL\s*SERVICE\s*FEE/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.90,
+                reason: 'International service fee includes card brand cross-border fees'
+            },
+
+            // === DISCOUNT DISAMBIGUATION ===
+            {
+                pattern: /DISCOUNT/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /(SALES|MONTHLY)\s*DISCOUNT/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Sales/Monthly discount is ALWAYS processor markup'
+            },
+
+            // === AUTHORIZATION FEE DISAMBIGUATION ===
+            {
+                pattern: /AUTH(ORIZATION)?\s*FEE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /^(VISA|MC|MASTERCARD|DISCOVER|AMEX)\s*AUTH(ORIZATION)?\s*FEE$/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.90,
+                reason: 'Per-brand auth fee is processor markup (networks include auth in interchange)'
+            },
+            {
+                pattern: /AUTH(ORIZATION)?\s*FEE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /MISUSE.*AUTH|AUTH.*MISUSE/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Authorization misuse fee is legitimate Visa penalty'
+            },
+
+            // === PROCESSING FEE DISAMBIGUATION ===
+            {
+                pattern: /PROCESSING\s*FEE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /^(VISA|MC|MASTERCARD|DISCOVER|VISADEBIT|MCDEBIT)\s*PROCESSING\s*FEE$/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Card brand processing fee suffix = WorldPay-style processor markup'
+            },
+            {
+                pattern: /PROCESSING\s*FEE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /ACQUIRER\s*PROCESSING\s*FEE/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Acquirer Processing Fee (APF) is legitimate Visa network fee'
+            },
+
+            // === EVO/OMEGA SECTION-BASED RULES ===
+            {
+                pattern: /^[0-9]{4}\s+(MC|VS)/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /[0-9]{4}\s+(MC|VS).*[2-3]\.\d{4}%/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.90,
+                reason: 'EVO fee code with 2-3% rate = interchange (Pass Through section)'
+            },
+            {
+                pattern: /^[0-9]{4}\s+(MC|VS)/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /[0-9]{4}\s+(MC|VS).*0\.2000%/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.90,
+                reason: 'EVO fee code with 0.20% rate = markup (Settlement/Discount section)'
+            },
+
+            // === DUES & ASSESSMENTS ALWAYS PASS-THROUGH ===
+            {
+                pattern: /DUES/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /DUES\s*[&]\s*ASSESSMENTS/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Dues & Assessments is ALWAYS network pass-through'
+            },
+
+            // === FANF ALWAYS PASS-THROUGH ===
+            {
+                pattern: /FANF|FIXED\s*ACQUIRER/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /FANF|FIXED\s*ACQUIRER\s*NETWORK/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'FANF is legitimate Visa fixed fee - cannot be negotiated'
+            },
+
+            // === NABU ALWAYS PASS-THROUGH ===
+            {
+                pattern: /NABU/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /NABU/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'NABU is legitimate MasterCard network fee'
+            },
+
+            // === INTERCHANGE ALWAYS PASS-THROUGH (unless bundled) ===
+            {
+                pattern: /INTERCHANGE/i,
+                excludeFrom: 'CONTROLLABLE',
+                when: /^INTERCHANGE$|^INTERCHANGE\s*(CHARGE|FEE)S?$/i,
+                assignTo: 'PASS_THROUGH',
+                confidence: 0.95,
+                reason: 'Pure "INTERCHANGE" label = legitimate pass-through'
+            },
+            {
+                pattern: /INTERCHANGE/i,
+                excludeFrom: 'PASS_THROUGH',
+                when: /INTERCHANGE\s*(MANAGEMENT|OPTIMIZATION|DIFFERENTIAL)/i,
+                assignTo: 'CONTROLLABLE',
+                confidence: 0.95,
+                reason: 'Interchange "management/optimization" = processor markup service'
+            }
+        ];
+
         function categorizeFee(feeName) {
             const upperName = feeName.toUpperCase();
 
-            // Check for hidden fees FIRST
+            // ============================================================
+            // STEP 1: Check EXCLUSION_RULES first (highest priority)
+            // These rules disambiguate fees that match multiple categories
+            // ============================================================
+            for (const rule of EXCLUSION_RULES) {
+                if (rule.pattern.test(upperName) && rule.when.test(upperName)) {
+                    return {
+                        category: rule.assignTo,
+                        confidence: rule.confidence,
+                        isHidden: false,
+                        exclusionRule: rule.reason
+                    };
+                }
+            }
+
+            // ============================================================
+            // STEP 2: Check for HIDDEN FEES (disguised markups)
+            // ============================================================
             for (const hidden of HIDDEN_FEE_PATTERNS) {
                 if (hidden.pattern.test(upperName)) {
                     return {
@@ -3654,7 +3882,9 @@ PCI COMPLIANCE              $19.95
                 }
             }
 
-            // Check controllable patterns
+            // ============================================================
+            // STEP 3: Check CONTROLLABLE patterns
+            // ============================================================
             for (const ctrl of CONTROLLABLE_PATTERNS) {
                 if (ctrl.pattern.test(upperName)) {
                     return {
@@ -3665,7 +3895,9 @@ PCI COMPLIANCE              $19.95
                 }
             }
 
-            // Check pass-through patterns
+            // ============================================================
+            // STEP 4: Check PASS_THROUGH patterns
+            // ============================================================
             for (const pass of PASSTHROUGH_PATTERNS) {
                 if (pass.pattern.test(upperName)) {
                     return {
@@ -3676,7 +3908,9 @@ PCI COMPLIANCE              $19.95
                 }
             }
 
-            // Default to review
+            // ============================================================
+            // STEP 5: Default to REVIEW (requires manual verification)
+            // ============================================================
             return {
                 category: 'REVIEW',
                 confidence: 0.5,
