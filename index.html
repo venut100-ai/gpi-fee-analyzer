@@ -509,7 +509,96 @@ OFFLINE CAPABLE: Works without internet connection
             max-height: 150px;
             overflow-y: auto;
         }
+        /* DASHBOARD STYLES */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .dashboard-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+        .dashboard-card-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--gray-500);
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .dashboard-metric {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+        .dashboard-metric.success { color: var(--success); }
+        .dashboard-metric.warning { color: var(--warning); }
+        .dashboard-metric.danger { color: var(--danger); }
+        .dashboard-metric.primary { color: var(--primary); }
+        .dashboard-subtitle {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+        }
+        .confidence-bar {
+            height: 8px;
+            background: var(--gray-200);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .confidence-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        .confidence-fill.high { background: linear-gradient(90deg, #22c55e, #16a34a); }
+        .confidence-fill.medium { background: linear-gradient(90deg, #f59e0b, #d97706); }
+        .confidence-fill.low { background: linear-gradient(90deg, #ef4444, #dc2626); }
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+        .source-breakdown {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .source-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .source-tag.learned { background: #dcfce7; color: #166534; }
+        .source-tag.official { background: #dbeafe; color: #1e40af; }
+        .source-tag.linguistic { background: #f3e8ff; color: #6b21a8; }
+        .source-tag.heuristics { background: #fef3c7; color: #92400e; }
+        .source-tag.pattern { background: #f1f5f9; color: #475569; }
+        .source-tag.unknown { background: #fee2e2; color: #991b1b; }
+        .savings-gauge {
+            position: relative;
+            width: 180px;
+            height: 100px;
+            margin: 0 auto;
+        }
     </style>
+    <!-- Chart.js for Dashboard Visualizations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -577,6 +666,7 @@ OFFLINE CAPABLE: Works without internet connection
         <!-- TABS -->
         <div class="tabs">
             <button class="tab active" data-tab="input">📄 Input</button>
+            <button class="tab" data-tab="dashboard">📈 Dashboard</button>
             <button class="tab" data-tab="quick">⚡ Quick</button>
             <button class="tab" data-tab="analysis">🔍 Analysis</button>
             <button class="tab" data-tab="compare">⚖️ Compare</button>
@@ -765,6 +855,130 @@ PCI COMPLIANCE              $19.95
                 <button class="btn btn-primary btn-lg btn-block" onclick="analyzeStatement()">
                     🚀 Analyze Statement
                 </button>
+            </div>
+        </div>
+
+        <!-- TAB: DASHBOARD - Real-Time Validation & Analytics -->
+        <div id="tab-dashboard" class="tab-content">
+            <div class="card" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white; margin-bottom: 1.5rem;">
+                <h3 style="margin: 0 0 0.5rem 0; font-size: 1.5rem;">📈 Real-Time Analysis Dashboard</h3>
+                <p style="opacity: 0.9; margin: 0;">Live categorization metrics, confidence scores, and savings analysis</p>
+            </div>
+
+            <!-- Alert when no data -->
+            <div id="dashboardNoData" class="alert alert-info">
+                <span class="alert-icon">📊</span>
+                <div>Upload a statement or enter fee data to see real-time analytics and categorization metrics.</div>
+            </div>
+
+            <!-- Dashboard Content (hidden until data loaded) -->
+            <div id="dashboardContent" class="hidden">
+                <!-- Row 1: Key Metrics -->
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">📊 Categorization Accuracy</div>
+                        <div class="dashboard-metric primary" id="dashAccuracy">--</div>
+                        <div class="dashboard-subtitle">Average confidence across all fees</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill high" id="dashAccuracyBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">✅ High Confidence Fees</div>
+                        <div class="dashboard-metric success" id="dashHighConf">0</div>
+                        <div class="dashboard-subtitle" id="dashHighConfPct">0% of total fees</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">⚠️ Needs Review</div>
+                        <div class="dashboard-metric warning" id="dashReview">0</div>
+                        <div class="dashboard-subtitle" id="dashReviewPct">0% need manual verification</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">🚨 Hidden Fees Detected</div>
+                        <div class="dashboard-metric danger" id="dashHidden">0</div>
+                        <div class="dashboard-subtitle" id="dashHiddenAmount">$0.00 in hidden markups</div>
+                    </div>
+                </div>
+
+                <!-- Row 2: Charts -->
+                <div class="grid-2">
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">💰 Fee Category Breakdown</div>
+                        <div class="chart-container">
+                            <canvas id="categoryPieChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">🎯 Confidence Distribution</div>
+                        <div class="chart-container">
+                            <canvas id="confidenceBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: Source Analysis & Savings -->
+                <div class="grid-2">
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">🔍 Categorization Sources</div>
+                        <p style="color: var(--gray-500); font-size: 0.85rem; margin-bottom: 0.75rem;">How fees were identified:</p>
+                        <div class="source-breakdown" id="sourceBreakdown">
+                            <!-- Dynamically populated -->
+                        </div>
+                        <div class="chart-container" style="height: 180px; margin-top: 1rem;">
+                            <canvas id="sourceDonutChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="dashboard-card-title">💵 Savings Potential</div>
+                        <div style="text-align: center; padding: 1rem 0;">
+                            <div style="font-size: 0.9rem; color: var(--gray-500);">Total Controllable Fees</div>
+                            <div id="dashControllable" style="font-size: 2.5rem; font-weight: 700; color: var(--success);">$0.00</div>
+                            <div style="font-size: 0.85rem; color: var(--gray-500); margin-top: 0.5rem;">Potential Annual Savings</div>
+                            <div id="dashAnnualSavings" style="font-size: 1.75rem; font-weight: 600; color: var(--primary);">$0.00</div>
+                        </div>
+                        <div style="background: var(--gray-100); border-radius: 12px; padding: 1rem; margin-top: 1rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--gray-600);">Pass-Through (Fixed)</span>
+                                <strong id="dashPassThrough">$0.00</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--gray-600);">Controllable (Negotiable)</span>
+                                <strong id="dashControllable2" style="color: var(--success);">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 4: Fee Type Breakdown -->
+                <div class="dashboard-card">
+                    <div class="dashboard-card-title">📋 Fee Type Analysis</div>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="feeTypeBarChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Row 5: Learning Stats -->
+                <div class="dashboard-card">
+                    <div class="dashboard-card-title">🧠 Machine Learning Status</div>
+                    <div class="grid-4" style="text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);" id="dashLearnedCount">0</div>
+                            <div style="font-size: 0.75rem; color: var(--gray-500);">Learned Patterns</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--secondary);" id="dashOfficialCount">305</div>
+                            <div style="font-size: 0.75rem; color: var(--gray-500);">Official Interchange</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--purple);" id="dashKeywordCount">48</div>
+                            <div style="font-size: 0.75rem; color: var(--gray-500);">Keywords Tracked</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--warning);" id="dashUserCorrections">0</div>
+                            <div style="font-size: 0.75rem; color: var(--gray-500);">User Corrections</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2311,7 +2525,8 @@ PCI COMPLIANCE              $19.95
             detectHiddenFees();
             generateCallScript();
             generateBenchmarks();
-            renderInsights(); // NEW: Render actionable insights
+            renderInsights();
+            updateDashboard(); // Real-time analytics dashboard
 
             // Save to history
             saveToHistory();
@@ -5284,6 +5499,7 @@ PCI COMPLIANCE              $19.95
             renderFeeTable();
             detectHiddenFees();
             generateCallScript();
+            updateDashboard();
         }
 
         function getBenchmarkBadge(fee) {
@@ -5294,6 +5510,256 @@ PCI COMPLIANCE              $19.95
                 return '<span class="badge badge-success">Savings</span>';
             }
             return '<span class="badge badge-info">Standard</span>';
+        }
+
+        // ============================================================
+        // DASHBOARD - Real-Time Analytics
+        // ============================================================
+        let dashboardCharts = {};
+
+        function updateDashboard() {
+            const fees = currentState.fees || [];
+
+            if (fees.length === 0) {
+                document.getElementById('dashboardNoData').classList.remove('hidden');
+                document.getElementById('dashboardContent').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('dashboardNoData').classList.add('hidden');
+            document.getElementById('dashboardContent').classList.remove('hidden');
+
+            // Calculate metrics
+            const avgConfidence = fees.reduce((sum, f) => sum + (f.confidence || 0.5), 0) / fees.length;
+            const highConfFees = fees.filter(f => (f.confidence || 0.5) >= 0.85).length;
+            const reviewFees = fees.filter(f => (f.confidence || 0.5) < 0.7 || f.category === 'REVIEW').length;
+            const hiddenFees = fees.filter(f => f.isHiddenFee);
+            const hiddenAmount = hiddenFees.reduce((sum, f) => sum + f.amount, 0);
+
+            // Update metric cards
+            const pct = Math.round(avgConfidence * 100);
+            document.getElementById('dashAccuracy').textContent = pct + '%';
+            document.getElementById('dashAccuracyBar').style.width = pct + '%';
+            document.getElementById('dashAccuracyBar').className = 'confidence-fill ' +
+                (avgConfidence >= 0.85 ? 'high' : avgConfidence >= 0.7 ? 'medium' : 'low');
+
+            document.getElementById('dashHighConf').textContent = highConfFees;
+            document.getElementById('dashHighConfPct').textContent =
+                Math.round(highConfFees / fees.length * 100) + '% of total fees';
+
+            document.getElementById('dashReview').textContent = reviewFees;
+            document.getElementById('dashReviewPct').textContent =
+                Math.round(reviewFees / fees.length * 100) + '% need manual verification';
+
+            document.getElementById('dashHidden').textContent = hiddenFees.length;
+            document.getElementById('dashHiddenAmount').textContent =
+                '$' + hiddenAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' in hidden markups';
+
+            // Savings potential
+            const controllable = currentState.controllableTotal || 0;
+            const passThrough = currentState.passThroughTotal || 0;
+            document.getElementById('dashControllable').textContent =
+                '$' + controllable.toLocaleString('en-US', { minimumFractionDigits: 2 });
+            document.getElementById('dashControllable2').textContent =
+                '$' + controllable.toLocaleString('en-US', { minimumFractionDigits: 2 });
+            document.getElementById('dashPassThrough').textContent =
+                '$' + passThrough.toLocaleString('en-US', { minimumFractionDigits: 2 });
+            document.getElementById('dashAnnualSavings').textContent =
+                '$' + (controllable * 12).toLocaleString('en-US', { minimumFractionDigits: 0 }) + '/year';
+
+            // Learning stats
+            const learnedCount = Object.keys(learnedPatterns || {}).length;
+            document.getElementById('dashLearnedCount').textContent = learnedCount;
+            document.getElementById('dashUserCorrections').textContent = learnedCount;
+
+            // Update charts
+            updateCategoryPieChart(fees);
+            updateConfidenceBarChart(fees);
+            updateSourceDonutChart(fees);
+            updateFeeTypeBarChart(fees);
+        }
+
+        function updateCategoryPieChart(fees) {
+            const ctx = document.getElementById('categoryPieChart');
+            if (!ctx) return;
+
+            const controllable = fees.filter(f => f.category === 'CONTROLLABLE').reduce((s, f) => s + f.amount, 0);
+            const passThrough = fees.filter(f => f.category === 'PASS_THROUGH').reduce((s, f) => s + f.amount, 0);
+            const review = fees.filter(f => f.category === 'REVIEW').reduce((s, f) => s + f.amount, 0);
+
+            if (dashboardCharts.categoryPie) {
+                dashboardCharts.categoryPie.destroy();
+            }
+
+            dashboardCharts.categoryPie = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Controllable (Negotiable)', 'Pass-Through (Fixed)', 'Needs Review'],
+                    datasets: [{
+                        data: [controllable, passThrough, review],
+                        backgroundColor: ['#22c55e', '#6b7280', '#f59e0b'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { padding: 15, usePointStyle: true } }
+                    }
+                }
+            });
+        }
+
+        function updateConfidenceBarChart(fees) {
+            const ctx = document.getElementById('confidenceBarChart');
+            if (!ctx) return;
+
+            // Group by confidence ranges
+            const ranges = {
+                '90-100%': fees.filter(f => (f.confidence || 0.5) >= 0.9).length,
+                '75-89%': fees.filter(f => (f.confidence || 0.5) >= 0.75 && (f.confidence || 0.5) < 0.9).length,
+                '60-74%': fees.filter(f => (f.confidence || 0.5) >= 0.6 && (f.confidence || 0.5) < 0.75).length,
+                'Below 60%': fees.filter(f => (f.confidence || 0.5) < 0.6).length
+            };
+
+            if (dashboardCharts.confidenceBar) {
+                dashboardCharts.confidenceBar.destroy();
+            }
+
+            dashboardCharts.confidenceBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ranges),
+                    datasets: [{
+                        label: 'Number of Fees',
+                        data: Object.values(ranges),
+                        backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        }
+
+        function updateSourceDonutChart(fees) {
+            const ctx = document.getElementById('sourceDonutChart');
+            if (!ctx) return;
+
+            // Count by source
+            const sourceCounts = {};
+            fees.forEach(f => {
+                const source = f.categorizationSource || 'pattern';
+                sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+            });
+
+            // Update source breakdown tags
+            const sourceLabels = {
+                'learned': { label: 'User Verified', class: 'learned', icon: '🧠' },
+                'official interchange': { label: 'Official', class: 'official', icon: '📜' },
+                'linguistic analysis': { label: 'Keywords', class: 'linguistic', icon: '📝' },
+                'rate heuristics': { label: 'Rate Analysis', class: 'heuristics', icon: '📊' },
+                'definitive pattern': { label: 'Pattern', class: 'pattern', icon: '✓' },
+                'default controllable': { label: 'Unknown', class: 'unknown', icon: '❓' },
+                'pattern': { label: 'Pattern', class: 'pattern', icon: '🔍' },
+                'exclusion rule': { label: 'Rule', class: 'pattern', icon: '⚡' }
+            };
+
+            const breakdownDiv = document.getElementById('sourceBreakdown');
+            breakdownDiv.innerHTML = Object.entries(sourceCounts).map(([source, count]) => {
+                const info = sourceLabels[source] || sourceLabels['pattern'];
+                return `<span class="source-tag ${info.class}">${info.icon} ${info.label}: ${count}</span>`;
+            }).join('');
+
+            if (dashboardCharts.sourceDonut) {
+                dashboardCharts.sourceDonut.destroy();
+            }
+
+            const colors = {
+                'learned': '#22c55e',
+                'official interchange': '#3b82f6',
+                'linguistic analysis': '#8b5cf6',
+                'rate heuristics': '#f59e0b',
+                'pattern': '#6b7280',
+                'definitive pattern': '#14b8a6',
+                'default controllable': '#ef4444',
+                'exclusion rule': '#06b6d4'
+            };
+
+            dashboardCharts.sourceDonut = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(sourceCounts).map(s => (sourceLabels[s] || sourceLabels['pattern']).label),
+                    datasets: [{
+                        data: Object.values(sourceCounts),
+                        backgroundColor: Object.keys(sourceCounts).map(s => colors[s] || '#6b7280'),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    cutout: '60%'
+                }
+            });
+        }
+
+        function updateFeeTypeBarChart(fees) {
+            const ctx = document.getElementById('feeTypeBarChart');
+            if (!ctx) return;
+
+            const buckets = currentState.feeBuckets || {};
+
+            if (dashboardCharts.feeTypeBar) {
+                dashboardCharts.feeTypeBar.destroy();
+            }
+
+            dashboardCharts.feeTypeBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Disc Rate', 'Per Trans', 'Per Auth', 'Batch', 'Monthly', 'Other', 'Pass-Through'],
+                    datasets: [{
+                        label: 'Amount ($)',
+                        data: [
+                            buckets.discRate || 0,
+                            buckets.perTrans || 0,
+                            buckets.perAuth || 0,
+                            buckets.batchFee || 0,
+                            buckets.monthlyFee || 0,
+                            buckets.otherFee || 0,
+                            buckets.passThrough || 0
+                        ],
+                        backgroundColor: [
+                            '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#6b7280'
+                        ],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         function detectHiddenFees() {
