@@ -3851,6 +3851,400 @@ PCI COMPLIANCE              $19.95
         ];
 
         // ============================================================
+        // UNIVERSAL FEE RECOGNITION ENGINE (Options 1-5)
+        // Processor-agnostic linguistic analysis for fee categorization
+        // Added: February 5, 2026
+        // ============================================================
+
+        // ============================================================
+        // OPTION 1: LINGUISTIC KEYWORD ANALYSIS
+        // Weighted keyword scoring based on training data analysis
+        // ============================================================
+
+        const LINGUISTIC_KEYWORDS = {
+            // Words that ALWAYS indicate PASS_THROUGH (high confidence)
+            PASS_THROUGH_STRONG: {
+                words: [
+                    'interchange', 'assessment', 'nabu', 'fanf', 'apf',
+                    'acquirer', 'regulated', 'durbin', 'merit', 'eirf',
+                    'kilobyte', 'clearing', 'integrity', 'dues', 'base ii',
+                    'license volume', 'digital enablement', 'world elite',
+                    'cps', 'network access fee', 'cross border', 'crossborder'
+                ],
+                weight: 10
+            },
+            // Words that STRONGLY indicate PASS_THROUGH
+            PASS_THROUGH_MEDIUM: {
+                words: [
+                    'enhanced', 'commercial electronic', 'business level',
+                    't&e', 'travel service', 'lodging', 'passenger transport',
+                    'small ticket', 'supermarket', 'restaurant tier',
+                    'rewards tier', 'signature', 'infinite', 'prepaid tier'
+                ],
+                weight: 5
+            },
+            // Words that ALWAYS indicate CONTROLLABLE (high confidence)
+            CONTROLLABLE_STRONG: {
+                words: [
+                    'discount', 'markup', 'margin', 'profit', 'monthly fee',
+                    'statement fee', 'platform fee', 'batch settle', 'batch fee',
+                    'pci non-validation', 'pci compliance', 'non-emv',
+                    'breach coverage', 'analytics', 'saferpayments', 'datawire',
+                    'chargeback fee', 'retrieval fee', 'regulatory product',
+                    'service mandate', 'processing fee'
+                ],
+                weight: 10
+            },
+            // Words that STRONGLY indicate CONTROLLABLE
+            CONTROLLABLE_MEDIUM: {
+                words: [
+                    'annual fee', 'monthly', 'service fee', 'gateway',
+                    'terminal', 'equipment', 'setup', 'integration',
+                    'wireless', 'virtual terminal', 'reporting', 'support',
+                    'cancellation', 'early termination', 'deconversion'
+                ],
+                weight: 5
+            },
+            // Words that are AMBIGUOUS - require context
+            AMBIGUOUS: [
+                'fee', 'transaction', 'auth', 'authorization', 'processing',
+                'access', 'network', 'visa', 'mastercard', 'discover', 'amex'
+            ]
+        };
+
+        // Card brand prefixes that indicate PASS_THROUGH interchange
+        const INTERCHANGE_PREFIXES = [
+            /^VI[\s\-]/i,      // Visa interchange
+            /^VS[\s\-]/i,      // Visa signature
+            /^MC[\s\-]/i,      // MasterCard interchange
+            /^DS[\s\-]/i,      // Discover interchange
+            /^DSCVR/i,         // Discover interchange
+            /^AM[\s\-]/i,      // Amex interchange
+            /^AX[\s\-]/i       // Amex interchange
+        ];
+
+        // Official interchange category patterns (from Visa/MC documentation)
+        const OFFICIAL_INTERCHANGE_PATTERNS = [
+            /CPS\/(RETAIL|RESTAURANT|SUPERMARKET|SMALL\s*TICKET|HOTEL|CAR\s*RENTAL|UTILITY|GOVERNMENT|E-?COMMERCE|AFD|SERVICE\s*STATION|PASSENGER|ACCOUNT\s*FUNDING)/i,
+            /MERIT\s*(I|II|III|BASE|TIER|1|2|3)/i,
+            /WORLD\s*(ELITE|HIGH\s*VALUE)/i,
+            /ENHANCED\s*(MERIT|STANDARD|KEY\s*ENTERED|VALUE)/i,
+            /DATA\s*RATE\s*(I|II|III|1|2|3)/i,
+            /EIRF|ELECTRONIC\s*INTERCHANGE\s*REIMBURSEMENT/i,
+            /REGULATED\s*(POS\s*)?DEBIT/i,
+            /(CONSUMER|COMMERCIAL)\s*(CREDIT|DEBIT)\s*REFUND/i,
+            /BUSINESS\s*(LEVEL|TIER|PRODUCT|TRAVEL|UTILITY)/i,
+            /PSL[\s\-]+(RETAIL|RESTAURANT|EXPRESS|KEY\s*ENTRY|HOTEL)/i,
+            /OPTBLUE\s*TIER/i,
+            /T&E(\s*LARGE\s*TICKET)?/i,
+            /PETROLEUM\s*(CAT|AFD|SERVICE\s*STATION)?/i,
+            /LODGING\s*(AND\s*)?AUTO\s*RENTAL/i,
+            /PASSENGER\s*TRANSPORT/i,
+            /SERVICE\s*INDUSTRIES/i,
+            /PUBLIC\s*SECTOR/i,
+            /CHARITIES/i,
+            /AIRLINE/i
+        ];
+
+        // ============================================================
+        // OPTION 2: RATE/AMOUNT HEURISTICS
+        // Use fee rates and amounts to infer category
+        // ============================================================
+
+        const RATE_HEURISTICS = {
+            // Interchange rate ranges (PASS_THROUGH)
+            interchangeRates: {
+                min: 0.0105,  // 1.05%
+                max: 0.0350,  // 3.50%
+                description: 'Typical interchange rates'
+            },
+            // Assessment rate ranges (PASS_THROUGH)
+            assessmentRates: {
+                min: 0.0011,  // 0.11%
+                max: 0.0016,  // 0.16%
+                description: 'Card brand assessment fees'
+            },
+            // Network per-transaction fees (PASS_THROUGH)
+            networkPerTxn: {
+                min: 0.0155,  // $0.0155
+                max: 0.0350,  // $0.035
+                description: 'Network access/APF fees'
+            },
+            // Uniform markup indicators (CONTROLLABLE)
+            uniformMarkup: [0.0010, 0.0015, 0.0020, 0.0025, 0.0030],
+            // Monthly fee indicators (CONTROLLABLE)
+            monthlyFees: [5.00, 9.95, 10.00, 15.00, 19.95, 25.00, 29.95, 49.95, 99.00]
+        };
+
+        /**
+         * Analyze rate to help determine category
+         */
+        function analyzeRate(rateString, amount) {
+            if (!rateString && !amount) return null;
+
+            // Parse percentage rate
+            const percentMatch = rateString?.match(/(\d+\.?\d*)\s*%/);
+            if (percentMatch) {
+                const rate = parseFloat(percentMatch[1]) / 100;
+
+                // Check if it's a uniform markup rate
+                if (RATE_HEURISTICS.uniformMarkup.includes(rate)) {
+                    return { category: 'CONTROLLABLE', reason: 'Uniform markup rate detected', confidence: 0.85 };
+                }
+
+                // Check interchange range
+                if (rate >= RATE_HEURISTICS.interchangeRates.min && rate <= RATE_HEURISTICS.interchangeRates.max) {
+                    return { category: 'PASS_THROUGH', reason: 'Rate in interchange range', confidence: 0.75 };
+                }
+
+                // Check assessment range
+                if (rate >= RATE_HEURISTICS.assessmentRates.min && rate <= RATE_HEURISTICS.assessmentRates.max) {
+                    return { category: 'PASS_THROUGH', reason: 'Rate in assessment range', confidence: 0.85 };
+                }
+            }
+
+            // Parse flat amount
+            if (amount) {
+                const amt = parseFloat(amount);
+                if (RATE_HEURISTICS.monthlyFees.includes(amt)) {
+                    return { category: 'CONTROLLABLE', reason: 'Common monthly fee amount', confidence: 0.80 };
+                }
+                if (amt >= RATE_HEURISTICS.networkPerTxn.min && amt <= RATE_HEURISTICS.networkPerTxn.max) {
+                    return { category: 'PASS_THROUGH', reason: 'Network per-transaction fee range', confidence: 0.75 };
+                }
+            }
+
+            return null;
+        }
+
+        // ============================================================
+        // OPTION 3: OFFICIAL INTERCHANGE LOOKUP
+        // Match against official Visa/MC/Discover interchange names
+        // ============================================================
+
+        /**
+         * Check if fee name matches official interchange category
+         */
+        function matchesOfficialInterchange(feeName) {
+            const upperName = feeName.toUpperCase();
+
+            // Check interchange prefixes
+            for (const prefix of INTERCHANGE_PREFIXES) {
+                if (prefix.test(feeName)) {
+                    return { match: true, confidence: 0.95, reason: 'Card brand interchange prefix' };
+                }
+            }
+
+            // Check official interchange patterns
+            for (const pattern of OFFICIAL_INTERCHANGE_PATTERNS) {
+                if (pattern.test(upperName)) {
+                    return { match: true, confidence: 0.92, reason: 'Official interchange category pattern' };
+                }
+            }
+
+            return { match: false };
+        }
+
+        // ============================================================
+        // OPTION 4: NEGATIVE PATTERN MATCHING
+        // Default to CONTROLLABLE if no PASS_THROUGH match
+        // ============================================================
+
+        // Definitive PASS_THROUGH patterns (if it matches ANY of these, it's pass-through)
+        const DEFINITIVE_PASSTHROUGH = [
+            // Assessment keywords
+            /\bASSESSMENT\b/i,
+            /\bDUES\b.*\bASSESSMENTS?\b/i,
+            // Network fee keywords
+            /\bNABU\b/i,
+            /\bFANF\b/i,
+            /\bAPF\b/i,
+            /\bBASE\s*II\b/i,
+            /\bKILOBYTE\b/i,
+            /\bCLEARING\s*FEE\b/i,
+            // Interchange keywords
+            /\bINTERCHANGE\b(?!\s*(MANAGEMENT|OPTIMIZATION|DIFFERENTIAL))/i,
+            /\bI\/C\b/i,
+            /\bIC\s*CHARGE/i,
+            // Regulated/Durbin
+            /\bREGULATED\b/i,
+            /\bDURBIN\b/i,
+            // Specific network fees
+            /ACQUIRER\s*(PROCESSING|PROC)\s*FEE/i,
+            /NETWORK\s*ACCESS\s*FEE/i,
+            /TRANSACTION\s*INTEGRITY\s*FEE/i,
+            /MISUSE\s*(OF\s*)?(AUTH|FEE)/i,
+            /CROSS[\s\-]*BORDER\s*FEE/i,
+            /INTL?\s*SERVICE\s*FEE/i,
+            /LICENSE\s*(VOLUME|RATE)\s*FEE/i,
+            /DIGITAL\s*ENABLEMENT/i,
+            /SYSTEM\s*FILE\s*FEE/i,
+            /CREDIT\s*VOUCHER\s*FEE/i,
+            /MONTHLY\s*LOCATION\s*FEE/i
+        ];
+
+        /**
+         * Check if fee definitely matches pass-through patterns
+         */
+        function isDefinitelyPassThrough(feeName) {
+            for (const pattern of DEFINITIVE_PASSTHROUGH) {
+                if (pattern.test(feeName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ============================================================
+        // OPTION 5: LEARNED PATTERNS STORAGE
+        // Store user-verified categorizations for future use
+        // ============================================================
+
+        // In-memory storage for learned patterns (would persist to localStorage in production)
+        let learnedPatterns = {
+            PASS_THROUGH: [],
+            CONTROLLABLE: []
+        };
+
+        /**
+         * Add a learned pattern from user verification
+         */
+        function learnPattern(feeName, category, source = 'user') {
+            const normalized = feeName.toLowerCase().trim();
+            if (!learnedPatterns[category]) {
+                learnedPatterns[category] = [];
+            }
+            if (!learnedPatterns[category].includes(normalized)) {
+                learnedPatterns[category].push(normalized);
+                console.log(`[Learning] Added "${feeName}" as ${category} (source: ${source})`);
+            }
+        }
+
+        /**
+         * Check learned patterns
+         */
+        function checkLearnedPatterns(feeName) {
+            const normalized = feeName.toLowerCase().trim();
+            for (const category of ['PASS_THROUGH', 'CONTROLLABLE']) {
+                if (learnedPatterns[category].includes(normalized)) {
+                    return { category, confidence: 0.98, source: 'learned' };
+                }
+            }
+            return null;
+        }
+
+        // ============================================================
+        // MASTER CATEGORIZATION FUNCTION (Universal)
+        // Combines all 5 options for maximum accuracy
+        // ============================================================
+
+        /**
+         * Universal fee categorization using linguistic analysis
+         * Priority: Learned > Official Interchange > Linguistic > Rate Heuristics > Negative Match
+         */
+        function universalCategorizeFee(feeName, options = {}) {
+            const { lineText, rateString, amount } = options;
+            const upperName = feeName.toUpperCase();
+
+            // STEP 1: Check learned patterns (Option 5)
+            const learned = checkLearnedPatterns(feeName);
+            if (learned) {
+                return { ...learned, isHidden: false };
+            }
+
+            // STEP 2: Check official interchange lookup (Option 3)
+            const interchange = matchesOfficialInterchange(feeName);
+            if (interchange.match) {
+                return {
+                    category: 'PASS_THROUGH',
+                    confidence: interchange.confidence,
+                    isHidden: false,
+                    source: interchange.reason
+                };
+            }
+
+            // STEP 3: Linguistic keyword analysis (Option 1)
+            let passScore = 0;
+            let ctrlScore = 0;
+            const lowerName = feeName.toLowerCase();
+
+            // Check strong PASS_THROUGH keywords
+            for (const word of LINGUISTIC_KEYWORDS.PASS_THROUGH_STRONG.words) {
+                if (lowerName.includes(word)) {
+                    passScore += LINGUISTIC_KEYWORDS.PASS_THROUGH_STRONG.weight;
+                }
+            }
+            // Check medium PASS_THROUGH keywords
+            for (const word of LINGUISTIC_KEYWORDS.PASS_THROUGH_MEDIUM.words) {
+                if (lowerName.includes(word)) {
+                    passScore += LINGUISTIC_KEYWORDS.PASS_THROUGH_MEDIUM.weight;
+                }
+            }
+            // Check strong CONTROLLABLE keywords
+            for (const word of LINGUISTIC_KEYWORDS.CONTROLLABLE_STRONG.words) {
+                if (lowerName.includes(word)) {
+                    ctrlScore += LINGUISTIC_KEYWORDS.CONTROLLABLE_STRONG.weight;
+                }
+            }
+            // Check medium CONTROLLABLE keywords
+            for (const word of LINGUISTIC_KEYWORDS.CONTROLLABLE_MEDIUM.words) {
+                if (lowerName.includes(word)) {
+                    ctrlScore += LINGUISTIC_KEYWORDS.CONTROLLABLE_MEDIUM.weight;
+                }
+            }
+
+            // If clear winner from linguistic analysis
+            if (passScore >= 10 && passScore > ctrlScore * 2) {
+                return {
+                    category: 'PASS_THROUGH',
+                    confidence: Math.min(0.95, 0.70 + (passScore / 50)),
+                    isHidden: false,
+                    source: 'linguistic analysis'
+                };
+            }
+            if (ctrlScore >= 10 && ctrlScore > passScore * 2) {
+                return {
+                    category: 'CONTROLLABLE',
+                    confidence: Math.min(0.95, 0.70 + (ctrlScore / 50)),
+                    isHidden: false,
+                    source: 'linguistic analysis'
+                };
+            }
+
+            // STEP 4: Rate/Amount heuristics (Option 2)
+            const rateResult = analyzeRate(rateString || lineText, amount);
+            if (rateResult && rateResult.confidence >= 0.80) {
+                return {
+                    category: rateResult.category,
+                    confidence: rateResult.confidence,
+                    isHidden: false,
+                    source: rateResult.reason
+                };
+            }
+
+            // STEP 5: Negative pattern matching (Option 4)
+            // If it's DEFINITELY pass-through, mark it
+            if (isDefinitelyPassThrough(feeName)) {
+                return {
+                    category: 'PASS_THROUGH',
+                    confidence: 0.90,
+                    isHidden: false,
+                    source: 'definitive pass-through pattern'
+                };
+            }
+
+            // STEP 6: Default to CONTROLLABLE for unknown fees (Option 4)
+            // Rationale: There are ~500 known interchange categories but infinite markup names
+            // Unknown fees are more likely to be processor-invented charges
+            return {
+                category: 'CONTROLLABLE',
+                confidence: 0.65,
+                isHidden: false,
+                source: 'default (unknown fee - likely processor markup)'
+            };
+        }
+
+        // ============================================================
         // PHASE 3: PROCESSOR FINGERPRINTING & SECTION CONTEXT ENGINE
         // Auto-detects processor and uses section context for categorization
         // Added: February 5, 2026
