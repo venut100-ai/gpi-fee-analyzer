@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GPI FEE COMPARISON TOOL v8.4 - THE UNIVERSE'S BEST STATEMENT ANALYZER
+GPI FEE COMPARISON TOOL v8.5 - THE UNIVERSE'S BEST STATEMENT ANALYZER
 ================================================================================
 MISSION: Build the BEST merchant processing statement analyzer in the universe.
 - EASY TO USE: Zero learning curve, intuitive interface
@@ -26,7 +26,7 @@ OFFLINE CAPABLE: Works without internet connection
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>GPI Fee Analyzer v8.4 - Legendary Edition</title>
+    <title>GPI Fee Analyzer v8.5 - Legendary Edition</title>
     <style>
         :root {
             --primary: #1a5f7a;
@@ -367,7 +367,82 @@ OFFLINE CAPABLE: Works without internet connection
 
         .hidden-fee-alert h4 { color: var(--danger); display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
         .hidden-fee-list { margin-top: 1rem; }
-        .hidden-fee-item { display: flex; justify-content: space-between; padding: 0.75rem; background: white; border-radius: 8px; margin-bottom: 0.5rem; }
+
+        /* Collapsible Hidden Fee Accordion */
+        .hidden-fee-accordion {
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .hidden-fee-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .hidden-fee-header:hover { background: #fef2f2; }
+        .hidden-fee-header .fee-name { font-weight: 600; color: #991b1b; display: flex; align-items: center; gap: 0.5rem; }
+        .hidden-fee-header .fee-amount { font-weight: 700; color: #dc2626; }
+        .hidden-fee-header .expand-icon {
+            transition: transform 0.2s;
+            color: var(--gray-500);
+            font-size: 0.8rem;
+        }
+        .hidden-fee-accordion.expanded .expand-icon { transform: rotate(180deg); }
+        .hidden-fee-details {
+            display: none;
+            padding: 0.75rem 1rem;
+            background: #fef2f2;
+            border-top: 1px solid #fecaca;
+            font-size: 0.85rem;
+        }
+        .hidden-fee-accordion.expanded .hidden-fee-details { display: block; }
+        .hidden-fee-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            color: #7f1d1d;
+        }
+        .hidden-fee-detail-row .label { color: #991b1b; }
+
+        /* MCC Search Dropdown */
+        .mcc-search-container { position: relative; }
+        .mcc-search-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+        .mcc-search-input:focus { border-color: var(--primary); outline: none; }
+        .mcc-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid var(--gray-200);
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+        .mcc-dropdown.show { display: block; }
+        .mcc-option {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 0.9rem;
+        }
+        .mcc-option:hover { background: var(--gray-50); }
+        .mcc-option .mcc-code { font-weight: 600; color: var(--primary); }
+        .mcc-option .mcc-desc { color: var(--gray-600); }
 
         /* PROGRESS BAR */
         .progress-container { margin: 1rem 0; }
@@ -440,7 +515,7 @@ OFFLINE CAPABLE: Works without internet connection
     <div class="header">
         <h1>🏆 GPI Fee Analyzer - The Universe's Best</h1>
         <div class="header-meta">
-            <span class="header-badge">v8.4</span>
+            <span class="header-badge">v8.5</span>
             <span class="header-badge" title="No data is stored or transmitted. Everything runs in your browser only.">🔒 100% Private</span>
             <span class="header-badge">📴 Works Offline</span>
             <span class="header-badge">🤝 Team Shareable</span>
@@ -506,7 +581,6 @@ OFFLINE CAPABLE: Works without internet connection
             <button class="tab" data-tab="analysis">🔍 Analysis</button>
             <button class="tab" data-tab="compare">⚖️ Compare</button>
             <button class="tab" data-tab="insights">💡 Insights</button>
-            <button class="tab" data-tab="proposal">📋 Proposal</button>
             <button class="tab" data-tab="script">📞 Call Script</button>
             <button class="tab" data-tab="benchmark">📊 Benchmarks</button>
             <button class="tab" data-tab="share">🤝 Share</button>
@@ -775,8 +849,8 @@ PCI COMPLIANCE              $19.95
         <!-- TAB: ANALYSIS -->
         <div id="tab-analysis" class="tab-content">
             <div id="hiddenFeeAlert" class="hidden-fee-alert hidden">
-                <h4>🚨 Hidden Fees Detected!</h4>
-                <p>These fees LOOK like pass-through but are actually <strong>controllable markup</strong>:</p>
+                <h4>🚨 Hidden Fees Detected! <span id="hiddenFeeCount" style="background: #dc2626; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; margin-left: 0.5rem;">0</span></h4>
+                <p style="font-size: 0.9rem; margin-bottom: 0.75rem;">Click each fee to view details:</p>
                 <div class="hidden-fee-list" id="hiddenFeeList"></div>
             </div>
 
@@ -1021,36 +1095,6 @@ PCI COMPLIANCE              $19.95
             </div>
         </div>
 
-        <!-- TAB: PROPOSAL -->
-        <div id="tab-proposal" class="tab-content">
-            <div class="card">
-                <h3 class="card-title">📋 Generate GPI Proposal</h3>
-                <div class="grid-3">
-                    <div class="form-group">
-                        <label>GPI Markup (bps)</label>
-                        <input type="number" id="gpiMarkup" value="15" min="0" max="100">
-                    </div>
-                    <div class="form-group">
-                        <label>GPI Auth Fee ($)</label>
-                        <input type="number" id="gpiAuthFee" value="0.05" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label>GPI Monthly Fee ($)</label>
-                        <input type="number" id="gpiMonthlyFeeProposal" value="15" step="0.01">
-                    </div>
-                </div>
-                <button class="btn btn-success btn-lg" onclick="generateProposal()">✨ Generate Proposal</button>
-            </div>
-
-            <div id="proposalOutput" class="card hidden">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <h3 class="card-title" style="margin: 0;">📄 Proposal Preview</h3>
-                    <button class="btn btn-primary" onclick="printProposal()">🖨️ Print / Save PDF</button>
-                </div>
-                <div class="proposal-preview" id="proposalPreview"></div>
-            </div>
-        </div>
-
         <!-- TAB: CALL SCRIPT -->
         <div id="tab-script" class="tab-content">
             <div class="card">
@@ -1069,11 +1113,28 @@ PCI COMPLIANCE              $19.95
         <div id="tab-benchmark" class="tab-content">
             <div class="card">
                 <h3 class="card-title">📊 Industry Benchmarks</h3>
-                <p style="color: var(--gray-500); margin-bottom: 1.5rem;">How does this merchant compare to industry averages?</p>
+                <p style="color: var(--gray-500); margin-bottom: 1rem;">Select the merchant's industry to see relevant benchmarks:</p>
+
+                <!-- MCC Search/Dropdown -->
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label>Merchant Category Code (MCC)</label>
+                    <div class="mcc-search-container">
+                        <input type="text" id="mccSearchInput" class="mcc-search-input"
+                            placeholder="Search by industry name or enter MCC code (e.g., 5812 or Restaurant)"
+                            oninput="filterMccOptions(this.value)"
+                            onfocus="showMccDropdown()"
+                            autocomplete="off">
+                        <div id="mccDropdown" class="mcc-dropdown"></div>
+                    </div>
+                    <div id="selectedMcc" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--primary); display: none;">
+                        <strong>Selected:</strong> <span id="selectedMccText"></span>
+                    </div>
+                </div>
+
                 <div id="benchmarkContent">
                     <div class="alert alert-warning">
                         <span class="alert-icon">⚠️</span>
-                        <div>Analyze a statement first to see benchmark comparisons.</div>
+                        <div>Analyze a statement and select an MCC to see benchmark comparisons.</div>
                     </div>
                 </div>
             </div>
@@ -1188,7 +1249,7 @@ PCI COMPLIANCE              $19.95
             // Setup activity listeners for session timer
             setupActivityListeners();
 
-            console.log('🏆 GPI Fee Analyzer v8.3 LEGENDARY EDITION initialized!');
+            console.log('🏆 GPI Fee Analyzer v8.5 LEGENDARY EDITION initialized!');
             console.log('🔒 Privacy Mode: No data storage, 15-min auto-clear enabled');
         }
 
@@ -1876,6 +1937,16 @@ PCI COMPLIANCE              $19.95
             // Parse and categorize fees
             currentState.fees = parseFees(feeText);
 
+            // If we still don't have totalFees, sum up parsed fees as fallback
+            if (currentState.totalFees === 0 && currentState.fees.length > 0) {
+                const summedFees = currentState.fees.reduce((sum, f) => sum + f.amount, 0);
+                if (summedFees > 0) {
+                    currentState.totalFees = summedFees;
+                    document.getElementById('totalFees').value = summedFees;
+                    console.log('Total fees calculated from parsed fee lines:', summedFees);
+                }
+            }
+
             // Detect pricing model
             currentState.pricingModel = detectPricingModel(feeText);
 
@@ -1906,59 +1977,77 @@ PCI COMPLIANCE              $19.95
             const result = { volume: 0, fees: 0, transactions: 0 };
             const upperText = text.toUpperCase();
 
-            // Patterns for total sales/volume
+            // Enhanced patterns for total sales/volume - more comprehensive
             const volumePatterns = [
-                /(?:TOTAL\s+)?(?:SALES|VOLUME|GROSS\s+SALES|NET\s+SALES|CARD\s+SALES|BANKCARD\s+SALES|TOTAL\s+AMOUNT)[\s\.:]+\$?([\d,]+\.?\d*)/gi,
-                /(?:VISA|MC|MASTERCARD|AMEX|DISCOVER)[\s\w]*(?:VOLUME|SALES)[\s\.:]+\$?([\d,]+\.?\d*)/gi,
-                /TOTAL\s+DEPOSIT(?:S)?[\s\.:]+\$?([\d,]+\.?\d*)/gi,
-                /BATCH\s+TOTAL[\s\.:]+\$?([\d,]+\.?\d*)/gi
+                // Explicit total volume/sales patterns
+                /(?:TOTAL\s+)?(?:SALES|VOLUME|GROSS\s+SALES|NET\s+SALES|CARD\s+SALES|BANKCARD\s+SALES|TOTAL\s+AMOUNT)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /(?:VISA|MC|MASTERCARD|AMEX|DISCOVER|DEBIT)[\s\w]*(?:VOLUME|SALES)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /TOTAL\s+DEPOSIT(?:S)?[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /BATCH\s+TOTAL[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /PROCESSED\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /MONTHLY\s+VOLUME[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                // Year-over-year patterns (e.g., "Apr-22 $120,700")
+                /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s-]?\d{2,4}\s+\$?([\d,]+\.?\d*)/gi
             ];
 
-            // Patterns for total fees
+            // Enhanced patterns for total fees
             const feePatterns = [
-                /(?:TOTAL\s+)?(?:FEES|CHARGES|PROCESSING\s+FEES|DISCOUNT|TOTAL\s+DEDUCTIONS)[\s\.:]+\$?([\d,]+\.?\d*)/gi,
-                /(?:AMOUNT\s+)?(?:DEDUCTED|CHARGED)[\s\.:]+\$?([\d,]+\.?\d*)/gi,
-                /TOTAL\s+(?:DUE|OWED|AMOUNT)[\s\.:]+\$?([\d,]+\.?\d*)/gi,
-                /(?:PROCESSING|SERVICE)\s+FEE(?:S)?[\s\.:]+\$?([\d,]+\.?\d*)/gi
+                /(?:TOTAL\s+)?(?:FEES|CHARGES|PROCESSING\s+FEES|DISCOUNT|TOTAL\s+DEDUCTIONS)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /(?:AMOUNT\s+)?(?:DEDUCTED|CHARGED)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /TOTAL\s+(?:DUE|OWED|AMOUNT)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /(?:PROCESSING|SERVICE)\s+FEE(?:S)?[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi,
+                /NET\s+(?:FEES|CHARGES)[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi
             ];
 
-            // Patterns for transaction count
+            // Enhanced patterns for transaction count
             const txnPatterns = [
-                /(?:TOTAL\s+)?(?:TRANSACTIONS?|ITEMS?|COUNT|# OF TRANS)[\s\.:]+(\d+)/gi,
-                /(\d+)\s+(?:TRANSACTIONS?|ITEMS?)/gi
+                /(?:TOTAL\s+)?(?:TRANSACTIONS?|ITEMS?|COUNT|# OF TRANS|NBR\s+TRANS)[\s\.:=]+(\d[\d,]*)/gi,
+                /(\d[\d,]*)\s+(?:TRANSACTIONS?|ITEMS?|SALES)/gi,
+                /TRANS(?:ACTION)?\s*(?:COUNT|#|NBR)[\s\.:=]+(\d[\d,]*)/gi
             ];
 
             // Extract largest volume match (likely the total)
             let maxVolume = 0;
+            let volumeMatches = [];
             for (const pattern of volumePatterns) {
                 let match;
+                pattern.lastIndex = 0; // Reset regex
                 while ((match = pattern.exec(text)) !== null) {
                     const value = parseFloat(match[1].replace(/,/g, ''));
-                    if (value > maxVolume && value < 100000000) { // Sanity check
-                        maxVolume = value;
+                    if (value > 1000 && value < 100000000) { // Sanity check - min $1000 to avoid matching fee amounts
+                        volumeMatches.push(value);
+                        if (value > maxVolume) {
+                            maxVolume = value;
+                        }
                     }
                 }
             }
             result.volume = maxVolume;
+            console.log('Volume extraction - found values:', volumeMatches, 'selected:', maxVolume);
 
             // Extract fees - look for reasonable fee amounts (typically much smaller than volume)
             let maxFees = 0;
+            let feeMatches = [];
             for (const pattern of feePatterns) {
                 let match;
+                pattern.lastIndex = 0; // Reset regex
                 while ((match = pattern.exec(text)) !== null) {
                     const value = parseFloat(match[1].replace(/,/g, ''));
-                    // Fees should be less than volume and reasonable
-                    if (value > maxFees && value < maxVolume * 0.1 && value < 50000) {
-                        maxFees = value;
+                    // Fees should be reasonable - typically 1-5% of volume, max $50k
+                    if (value > 0 && value < 50000 && (maxVolume === 0 || value < maxVolume * 0.1)) {
+                        feeMatches.push(value);
+                        if (value > maxFees) {
+                            maxFees = value;
+                        }
                     }
                 }
             }
             result.fees = maxFees;
+            console.log('Fee extraction - found values:', feeMatches, 'selected:', maxFees);
 
-            // If we couldn't find fees but have volume, estimate fees at 2.5% of volume
+            // If we couldn't find fees but have volume, try to sum up individual fee line items
             if (result.fees === 0 && result.volume > 0) {
-                // Try to sum up individual fee line items
-                const feeLinePattern = /(?:FEE|CHARGE|DISC|ASSESSMENT|DUES)[\w\s]*[\s\.:]+\$?([\d,]+\.?\d*)/gi;
+                const feeLinePattern = /(?:FEE|CHARGE|DISC|ASSESSMENT|DUES)[\w\s]*[\s\.:=\$]*\$?([\d,]+\.?\d*)/gi;
                 let totalFees = 0;
                 let match;
                 while ((match = feeLinePattern.exec(text)) !== null) {
@@ -1969,27 +2058,35 @@ PCI COMPLIANCE              $19.95
                 }
                 if (totalFees > 0) {
                     result.fees = totalFees;
+                    console.log('Fee extraction fallback - summed individual fees:', totalFees);
                 }
             }
 
             // Extract transaction count
+            let txnMatches = [];
             for (const pattern of txnPatterns) {
                 let match;
+                pattern.lastIndex = 0; // Reset regex
                 while ((match = pattern.exec(text)) !== null) {
-                    const value = parseInt(match[1]);
-                    if (value > result.transactions && value < 1000000) {
-                        result.transactions = value;
+                    const value = parseInt(match[1].replace(/,/g, ''));
+                    if (value > 0 && value < 1000000) {
+                        txnMatches.push(value);
+                        if (value > result.transactions) {
+                            result.transactions = value;
+                        }
                     }
                 }
             }
+            console.log('Transaction extraction - found values:', txnMatches, 'selected:', result.transactions);
 
             // If we have volume but no transactions, estimate based on average ticket
             if (result.transactions === 0 && result.volume > 0) {
                 // Assume average ticket of $50
                 result.transactions = Math.round(result.volume / 50);
+                console.log('Transaction estimation - estimated from volume:', result.transactions);
             }
 
-            console.log('Auto-extraction results:', result);
+            console.log('Auto-extraction final results:', result);
             return result;
         }
 
@@ -2936,8 +3033,7 @@ PCI COMPLIANCE              $19.95
             document.getElementById('statPassThrough').textContent =
                 '$' + currentState.passThroughTotal.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
-            document.getElementById('statHiddenFees').textContent =
-                currentState.hiddenFees.length;
+            // Note: Hidden fees count is updated in detectHiddenFees() to ensure proper timing
         }
 
         function renderFeeTable() {
@@ -3001,20 +3097,62 @@ PCI COMPLIANCE              $19.95
 
             const alertDiv = document.getElementById('hiddenFeeAlert');
             const listDiv = document.getElementById('hiddenFeeList');
+            const countSpan = document.getElementById('hiddenFeeCount');
+            const statHiddenFees = document.getElementById('statHiddenFees');
+
+            // Update the stat card count
+            if (statHiddenFees) {
+                statHiddenFees.textContent = currentState.hiddenFees.length;
+            }
 
             if (currentState.hiddenFees.length > 0) {
                 alertDiv.classList.remove('hidden');
-                listDiv.innerHTML = currentState.hiddenFees.map(fee => `
-                    <div class="hidden-fee-item">
-                        <div>
-                            <strong>${fee.name}</strong>
-                            <div style="font-size: 0.85rem; color: #666;">${fee.hiddenInfo?.note || 'Hidden markup'}</div>
+                if (countSpan) countSpan.textContent = currentState.hiddenFees.length;
+
+                // Create collapsible accordions for each hidden fee
+                listDiv.innerHTML = currentState.hiddenFees.map((fee, index) => {
+                    const units = fee.hiddenInfo?.units || fee.units || '-';
+                    const location = fee.hiddenInfo?.location || fee.location || 'See statement';
+                    const note = fee.hiddenInfo?.note || 'Controllable markup disguised as pass-through';
+
+                    return `
+                    <div class="hidden-fee-accordion" id="hiddenFee${index}">
+                        <div class="hidden-fee-header" onclick="toggleHiddenFee(${index})">
+                            <span class="fee-name">🚨 ${fee.name}</span>
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <span class="fee-amount">$${fee.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                <span class="expand-icon">▼</span>
+                            </div>
                         </div>
-                        <div style="font-weight: 700; color: #991b1b;">$${fee.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                        <div class="hidden-fee-details">
+                            <div class="hidden-fee-detail-row">
+                                <span class="label">Amount:</span>
+                                <span>$${fee.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div class="hidden-fee-detail-row">
+                                <span class="label">Units/Qty:</span>
+                                <span>${units}</span>
+                            </div>
+                            <div class="hidden-fee-detail-row">
+                                <span class="label">Reference:</span>
+                                <span>${location}</span>
+                            </div>
+                            <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #fca5a5; font-size: 0.8rem; color: #7f1d1d;">
+                                💡 ${note}
+                            </div>
+                        </div>
                     </div>
-                `).join('');
+                    `;
+                }).join('');
             } else {
                 alertDiv.classList.add('hidden');
+            }
+        }
+
+        function toggleHiddenFee(index) {
+            const accordion = document.getElementById('hiddenFee' + index);
+            if (accordion) {
+                accordion.classList.toggle('expanded');
             }
         }
 
@@ -3129,6 +3267,240 @@ PCI COMPLIANCE              $19.95
             general: { good: 2.00, average: 2.35, poor: 2.85 }
         };
 
+        // MCC (Merchant Category Code) Database - Common Categories
+        const MCC_DATABASE = [
+            // Restaurants & Food Service
+            { code: '5812', name: 'Restaurants', category: 'restaurant', keywords: ['dining', 'food', 'cafe', 'bistro', 'eatery'] },
+            { code: '5813', name: 'Bars, Cocktail Lounges, Nightclubs', category: 'restaurant', keywords: ['bar', 'pub', 'tavern', 'lounge'] },
+            { code: '5814', name: 'Fast Food Restaurants', category: 'restaurant', keywords: ['fast food', 'quick service', 'qsr', 'drive-thru'] },
+            { code: '5811', name: 'Caterers', category: 'restaurant', keywords: ['catering', 'event food'] },
+
+            // Retail - General
+            { code: '5311', name: 'Department Stores', category: 'retail_cp', keywords: ['department', 'retail', 'store'] },
+            { code: '5331', name: 'Variety Stores', category: 'retail_cp', keywords: ['variety', 'dollar', 'discount'] },
+            { code: '5399', name: 'General Merchandise', category: 'retail_cp', keywords: ['general', 'merchandise', 'retail'] },
+            { code: '5310', name: 'Discount Stores', category: 'retail_cp', keywords: ['discount', 'warehouse', 'club'] },
+
+            // Supermarkets & Grocery
+            { code: '5411', name: 'Grocery Stores, Supermarkets', category: 'supermarket', keywords: ['grocery', 'supermarket', 'food store', 'market'] },
+            { code: '5422', name: 'Freezer/Meat Lockers', category: 'supermarket', keywords: ['meat', 'butcher', 'freezer'] },
+            { code: '5441', name: 'Candy, Nut, Confectionery', category: 'retail_cp', keywords: ['candy', 'sweets', 'confectionery'] },
+            { code: '5451', name: 'Dairy Products', category: 'supermarket', keywords: ['dairy', 'milk', 'cheese'] },
+            { code: '5462', name: 'Bakeries', category: 'retail_cp', keywords: ['bakery', 'bread', 'pastry'] },
+
+            // Gas Stations & Auto
+            { code: '5541', name: 'Service Stations (Gas)', category: 'retail_cp', keywords: ['gas', 'fuel', 'petrol', 'service station'] },
+            { code: '5542', name: 'Automated Fuel Dispensers', category: 'retail_cp', keywords: ['gas pump', 'pay at pump', 'automated fuel'] },
+            { code: '5511', name: 'Auto Dealers (New/Used)', category: 'retail_cp', keywords: ['car dealer', 'auto dealer', 'vehicle sales'] },
+            { code: '5521', name: 'Auto Dealers (Used Only)', category: 'retail_cp', keywords: ['used car', 'pre-owned'] },
+            { code: '5531', name: 'Auto Parts & Accessories', category: 'retail_cp', keywords: ['auto parts', 'car parts', 'accessories'] },
+            { code: '5533', name: 'Auto Parts Stores', category: 'retail_cp', keywords: ['parts store', 'autozone', 'oreilly'] },
+            { code: '7538', name: 'Auto Service Shops', category: 'retail_cp', keywords: ['mechanic', 'auto repair', 'garage'] },
+
+            // Healthcare & Medical
+            { code: '8011', name: 'Doctors, Physicians', category: 'b2b', keywords: ['doctor', 'physician', 'medical', 'healthcare'] },
+            { code: '8021', name: 'Dentists', category: 'b2b', keywords: ['dentist', 'dental', 'orthodontist'] },
+            { code: '8031', name: 'Osteopaths', category: 'b2b', keywords: ['osteopath', 'chiropractor'] },
+            { code: '8041', name: 'Chiropractors', category: 'b2b', keywords: ['chiropractic', 'spine'] },
+            { code: '8042', name: 'Optometrists, Ophthalmologists', category: 'b2b', keywords: ['eye doctor', 'optometrist', 'vision'] },
+            { code: '8049', name: 'Podiatrists', category: 'b2b', keywords: ['podiatrist', 'foot doctor'] },
+            { code: '8050', name: 'Nursing/Personal Care Facilities', category: 'b2b', keywords: ['nursing home', 'care facility', 'assisted living'] },
+            { code: '8062', name: 'Hospitals', category: 'b2b', keywords: ['hospital', 'medical center'] },
+            { code: '5912', name: 'Drug Stores, Pharmacies', category: 'retail_cp', keywords: ['pharmacy', 'drugstore', 'cvs', 'walgreens'] },
+
+            // Professional Services
+            { code: '8111', name: 'Legal Services', category: 'b2b', keywords: ['lawyer', 'attorney', 'legal', 'law firm'] },
+            { code: '8931', name: 'Accounting, Bookkeeping', category: 'b2b', keywords: ['accountant', 'cpa', 'bookkeeper', 'tax'] },
+            { code: '8999', name: 'Professional Services', category: 'b2b', keywords: ['professional', 'consultant', 'business services'] },
+            { code: '7392', name: 'Management Consulting', category: 'b2b', keywords: ['consulting', 'management', 'advisory'] },
+
+            // E-commerce & Online
+            { code: '5964', name: 'Direct Marketing - Catalog', category: 'ecommerce', keywords: ['catalog', 'mail order', 'direct marketing'] },
+            { code: '5965', name: 'Direct Marketing - Combo', category: 'ecommerce', keywords: ['direct marketing', 'combination'] },
+            { code: '5966', name: 'Direct Marketing - Outbound', category: 'ecommerce', keywords: ['outbound', 'telemarketing'] },
+            { code: '5967', name: 'Direct Marketing - Inbound', category: 'ecommerce', keywords: ['inbound', 'call center'] },
+            { code: '5968', name: 'Direct Marketing - Subscription', category: 'ecommerce', keywords: ['subscription', 'recurring', 'membership'] },
+            { code: '5969', name: 'Direct Marketing - Other', category: 'ecommerce', keywords: ['ecommerce', 'online store', 'web store'] },
+
+            // Travel & Hospitality
+            { code: '3501', name: 'Hotels, Motels, Resorts', category: 'travel', keywords: ['hotel', 'motel', 'resort', 'lodging', 'inn'] },
+            { code: '7011', name: 'Lodging - Hotels, Motels', category: 'travel', keywords: ['lodging', 'accommodation', 'stay'] },
+            { code: '4511', name: 'Airlines', category: 'travel', keywords: ['airline', 'air travel', 'flight'] },
+            { code: '4722', name: 'Travel Agencies', category: 'travel', keywords: ['travel agency', 'tour', 'vacation'] },
+            { code: '7512', name: 'Car Rental', category: 'travel', keywords: ['car rental', 'auto rental', 'rent a car'] },
+
+            // Utilities & Telecom
+            { code: '4812', name: 'Telecom Equipment', category: 'utilities', keywords: ['telecom', 'phone', 'communication'] },
+            { code: '4814', name: 'Telecom Services', category: 'utilities', keywords: ['phone service', 'telecom', 'mobile'] },
+            { code: '4816', name: 'Computer Network Services', category: 'utilities', keywords: ['internet', 'network', 'isp'] },
+            { code: '4900', name: 'Utilities - Electric, Gas, Water', category: 'utilities', keywords: ['utility', 'electric', 'gas', 'water', 'power'] },
+
+            // Construction & Contractors
+            { code: '1520', name: 'General Contractors - Residential', category: 'b2b', keywords: ['contractor', 'construction', 'builder', 'home builder'] },
+            { code: '1711', name: 'HVAC Contractors', category: 'b2b', keywords: ['hvac', 'heating', 'cooling', 'air conditioning'] },
+            { code: '1731', name: 'Electrical Contractors', category: 'b2b', keywords: ['electrician', 'electrical', 'wiring'] },
+            { code: '1740', name: 'Masonry, Stonework', category: 'b2b', keywords: ['mason', 'stonework', 'brick'] },
+            { code: '1750', name: 'Carpentry Contractors', category: 'b2b', keywords: ['carpenter', 'carpentry', 'woodwork'] },
+            { code: '1761', name: 'Roofing/Siding Contractors', category: 'b2b', keywords: ['roofing', 'siding', 'roof'] },
+            { code: '1771', name: 'Concrete Contractors', category: 'b2b', keywords: ['concrete', 'cement', 'paving'] },
+
+            // Personal Services
+            { code: '7230', name: 'Beauty/Barber Shops', category: 'retail_cp', keywords: ['salon', 'barber', 'beauty', 'hair', 'spa'] },
+            { code: '7298', name: 'Health & Beauty Spas', category: 'retail_cp', keywords: ['spa', 'wellness', 'massage'] },
+            { code: '7941', name: 'Sports Clubs/Fields', category: 'retail_cp', keywords: ['gym', 'fitness', 'sports', 'athletic'] },
+            { code: '7997', name: 'Membership Clubs', category: 'retail_cp', keywords: ['club', 'membership', 'country club'] },
+            { code: '7299', name: 'Miscellaneous Recreation Services', category: 'retail_cp', keywords: ['recreation', 'entertainment', 'leisure'] },
+
+            // Education
+            { code: '8211', name: 'Elementary/Secondary Schools', category: 'b2b', keywords: ['school', 'education', 'k-12'] },
+            { code: '8220', name: 'Colleges, Universities', category: 'b2b', keywords: ['college', 'university', 'higher education'] },
+            { code: '8299', name: 'Schools, Educational Services', category: 'b2b', keywords: ['training', 'educational', 'learning'] },
+
+            // Non-Profit & Government
+            { code: '8398', name: 'Charitable Organizations', category: 'b2b', keywords: ['charity', 'nonprofit', 'non-profit', 'donation'] },
+            { code: '8641', name: 'Civic, Social, Fraternal', category: 'b2b', keywords: ['civic', 'social', 'fraternal', 'organization'] },
+            { code: '9211', name: 'Court Costs', category: 'b2b', keywords: ['court', 'legal fees', 'government'] },
+            { code: '9311', name: 'Tax Payments', category: 'b2b', keywords: ['tax', 'government', 'irs'] },
+            { code: '9399', name: 'Government Services', category: 'b2b', keywords: ['government', 'municipal', 'city', 'state'] },
+
+            // Wholesale & B2B
+            { code: '5013', name: 'Motor Vehicle Supplies', category: 'b2b', keywords: ['wholesale', 'auto supply', 'vehicle parts'] },
+            { code: '5021', name: 'Office/Commercial Furniture', category: 'b2b', keywords: ['furniture', 'office', 'commercial'] },
+            { code: '5039', name: 'Construction Materials', category: 'b2b', keywords: ['lumber', 'building materials', 'construction supply'] },
+            { code: '5044', name: 'Office Equipment', category: 'b2b', keywords: ['office equipment', 'copier', 'printer'] },
+            { code: '5045', name: 'Computers, Software', category: 'b2b', keywords: ['computer', 'software', 'it', 'technology'] },
+            { code: '5046', name: 'Commercial Equipment', category: 'b2b', keywords: ['commercial', 'equipment', 'industrial'] },
+            { code: '5047', name: 'Medical Equipment', category: 'b2b', keywords: ['medical equipment', 'healthcare supply'] },
+            { code: '5065', name: 'Electrical Parts', category: 'b2b', keywords: ['electrical', 'parts', 'wholesale'] },
+            { code: '5072', name: 'Hardware Equipment', category: 'b2b', keywords: ['hardware', 'tools', 'wholesale'] },
+            { code: '5085', name: 'Industrial Supplies', category: 'b2b', keywords: ['industrial', 'supply', 'manufacturing'] },
+            { code: '5099', name: 'Durable Goods', category: 'b2b', keywords: ['durable', 'goods', 'wholesale'] },
+
+            // Specialty Retail
+            { code: '5611', name: 'Men\'s Clothing', category: 'retail_cp', keywords: ['mens', 'clothing', 'apparel', 'suits'] },
+            { code: '5621', name: 'Women\'s Clothing', category: 'retail_cp', keywords: ['womens', 'clothing', 'fashion', 'boutique'] },
+            { code: '5631', name: 'Women\'s Accessories', category: 'retail_cp', keywords: ['accessories', 'handbag', 'jewelry'] },
+            { code: '5641', name: 'Children\'s Clothing', category: 'retail_cp', keywords: ['kids', 'children', 'baby', 'clothing'] },
+            { code: '5651', name: 'Family Clothing', category: 'retail_cp', keywords: ['family', 'clothing', 'apparel'] },
+            { code: '5661', name: 'Shoe Stores', category: 'retail_cp', keywords: ['shoes', 'footwear', 'boots'] },
+            { code: '5699', name: 'Misc Apparel/Accessory', category: 'retail_cp', keywords: ['apparel', 'clothing', 'accessories'] },
+            { code: '5712', name: 'Furniture Stores', category: 'retail_cp', keywords: ['furniture', 'home furnishing'] },
+            { code: '5713', name: 'Floor Covering', category: 'retail_cp', keywords: ['flooring', 'carpet', 'tile'] },
+            { code: '5714', name: 'Drapery/Window Covering', category: 'retail_cp', keywords: ['drapery', 'curtains', 'blinds', 'window'] },
+            { code: '5719', name: 'Misc Home Furnishing', category: 'retail_cp', keywords: ['home', 'decor', 'furnishing'] },
+            { code: '5722', name: 'Household Appliance Stores', category: 'retail_cp', keywords: ['appliance', 'electronics', 'household'] },
+            { code: '5732', name: 'Electronics Stores', category: 'retail_cp', keywords: ['electronics', 'computers', 'tech'] },
+            { code: '5733', name: 'Music Stores', category: 'retail_cp', keywords: ['music', 'instruments', 'records'] },
+            { code: '5734', name: 'Computer Software Stores', category: 'retail_cp', keywords: ['software', 'computer store'] },
+            { code: '5735', name: 'Record Stores', category: 'retail_cp', keywords: ['records', 'music', 'vinyl'] },
+            { code: '5941', name: 'Sporting Goods', category: 'retail_cp', keywords: ['sports', 'sporting goods', 'athletic'] },
+            { code: '5942', name: 'Book Stores', category: 'retail_cp', keywords: ['books', 'bookstore', 'reading'] },
+            { code: '5943', name: 'Stationery/Office Supplies', category: 'retail_cp', keywords: ['office supplies', 'stationery', 'staples'] },
+            { code: '5944', name: 'Jewelry Stores', category: 'retail_cp', keywords: ['jewelry', 'jeweler', 'watches'] },
+            { code: '5945', name: 'Hobby/Toy/Game Shops', category: 'retail_cp', keywords: ['toys', 'games', 'hobby'] },
+            { code: '5946', name: 'Camera/Photo Supplies', category: 'retail_cp', keywords: ['camera', 'photo', 'photography'] },
+            { code: '5947', name: 'Gift/Card/Novelty Shops', category: 'retail_cp', keywords: ['gifts', 'cards', 'novelty'] },
+            { code: '5948', name: 'Luggage/Leather Goods', category: 'retail_cp', keywords: ['luggage', 'leather', 'bags'] },
+            { code: '5949', name: 'Sewing/Fabric Stores', category: 'retail_cp', keywords: ['fabric', 'sewing', 'craft'] },
+            { code: '5950', name: 'Glassware/Crystal Stores', category: 'retail_cp', keywords: ['glass', 'crystal', 'collectibles'] },
+            { code: '5970', name: 'Art Dealers/Galleries', category: 'retail_cp', keywords: ['art', 'gallery', 'artwork'] },
+            { code: '5971', name: 'Art/Craft Supplies', category: 'retail_cp', keywords: ['art supplies', 'craft', 'hobby'] },
+            { code: '5972', name: 'Stamp/Coin Stores', category: 'retail_cp', keywords: ['stamps', 'coins', 'collectibles'] },
+            { code: '5973', name: 'Religious Goods', category: 'retail_cp', keywords: ['religious', 'church', 'spiritual'] },
+            { code: '5975', name: 'Hearing Aids', category: 'retail_cp', keywords: ['hearing aid', 'audiology'] },
+            { code: '5976', name: 'Orthopedic Goods', category: 'retail_cp', keywords: ['orthopedic', 'medical supply'] },
+            { code: '5977', name: 'Cosmetic Stores', category: 'retail_cp', keywords: ['cosmetics', 'beauty', 'makeup'] },
+            { code: '5978', name: 'Typewriter Stores', category: 'retail_cp', keywords: ['typewriter', 'office'] },
+            { code: '5983', name: 'Fuel Dealers', category: 'retail_cp', keywords: ['fuel', 'oil', 'heating'] },
+            { code: '5992', name: 'Florists', category: 'retail_cp', keywords: ['florist', 'flowers', 'floral'] },
+            { code: '5993', name: 'Cigar Stores', category: 'retail_cp', keywords: ['cigar', 'tobacco', 'smoke shop'] },
+            { code: '5994', name: 'News Dealers', category: 'retail_cp', keywords: ['news', 'magazine', 'newsstand'] },
+            { code: '5995', name: 'Pet Shops', category: 'retail_cp', keywords: ['pet', 'pet store', 'animals'] },
+            { code: '5996', name: 'Swimming Pools', category: 'retail_cp', keywords: ['pool', 'swimming', 'spa'] },
+            { code: '5997', name: 'Electric Razor Stores', category: 'retail_cp', keywords: ['razor', 'shaving'] },
+            { code: '5998', name: 'Tent/Awning Shops', category: 'retail_cp', keywords: ['tent', 'awning', 'outdoor'] },
+            { code: '5999', name: 'Miscellaneous Retail', category: 'retail_cp', keywords: ['retail', 'store', 'shop'] }
+        ];
+
+        // Selected MCC for benchmarks
+        let selectedMcc = null;
+
+        function filterMccOptions(searchTerm) {
+            const dropdown = document.getElementById('mccDropdown');
+            const searchLower = searchTerm.toLowerCase().trim();
+
+            if (!searchLower) {
+                dropdown.innerHTML = '';
+                dropdown.classList.remove('show');
+                return;
+            }
+
+            // Check if it's a numeric search (MCC code)
+            const isNumeric = /^\d+$/.test(searchTerm);
+
+            let matches = [];
+            if (isNumeric) {
+                // Search by MCC code
+                matches = MCC_DATABASE.filter(mcc => mcc.code.startsWith(searchTerm));
+            } else {
+                // Search by name or keywords
+                matches = MCC_DATABASE.filter(mcc => {
+                    const nameMatch = mcc.name.toLowerCase().includes(searchLower);
+                    const keywordMatch = mcc.keywords.some(kw => kw.toLowerCase().includes(searchLower));
+                    return nameMatch || keywordMatch;
+                });
+            }
+
+            // Limit results
+            matches = matches.slice(0, 15);
+
+            if (matches.length > 0) {
+                dropdown.innerHTML = matches.map(mcc => `
+                    <div class="mcc-option" onclick="selectMcc('${mcc.code}', '${mcc.name.replace(/'/g, "\\'")}', '${mcc.category}')">
+                        <span class="mcc-code">${mcc.code}</span> - <span class="mcc-desc">${mcc.name}</span>
+                    </div>
+                `).join('');
+                dropdown.classList.add('show');
+            } else {
+                dropdown.innerHTML = '<div class="mcc-option" style="color: var(--gray-500);">No matches found</div>';
+                dropdown.classList.add('show');
+            }
+        }
+
+        function showMccDropdown() {
+            const searchTerm = document.getElementById('mccSearchInput').value;
+            if (searchTerm) {
+                filterMccOptions(searchTerm);
+            }
+        }
+
+        function selectMcc(code, name, category) {
+            selectedMcc = { code, name, category };
+
+            document.getElementById('mccSearchInput').value = `${code} - ${name}`;
+            document.getElementById('mccDropdown').classList.remove('show');
+            document.getElementById('selectedMcc').style.display = 'block';
+            document.getElementById('selectedMccText').textContent = `${code} - ${name} (${category.replace('_', ' ')})`;
+
+            // Update state and regenerate benchmarks
+            currentState.mccCode = code;
+            currentState.mccCategory = category;
+            currentState.mccName = name;
+
+            // Regenerate benchmarks with selected MCC
+            if (currentState.totalVolume > 0) {
+                generateBenchmarks();
+            }
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const container = document.querySelector('.mcc-search-container');
+            if (container && !container.contains(e.target)) {
+                document.getElementById('mccDropdown').classList.remove('show');
+            }
+        });
+
         // VISA FANF (Fixed Acquirer Network Fee) - Complete Tier Structure
         const FANF_TIERS_CNP = [
             { min: 0, max: 199.99, fee: 0, note: 'Exempt' },
@@ -3183,19 +3555,23 @@ PCI COMPLIANCE              $19.95
             const content = document.getElementById('benchmarkContent');
 
             if (currentState.fees.length === 0 || currentState.totalVolume === 0) {
-                content.innerHTML = '<div class="alert alert-warning"><span class="alert-icon">⚠️</span><div>Analyze a statement first to see benchmark comparisons.</div></div>';
+                content.innerHTML = '<div class="alert alert-warning"><span class="alert-icon">⚠️</span><div>Analyze a statement and select an MCC to see benchmark comparisons.</div></div>';
                 return;
             }
 
-            // Use Nilson Report weighted average as baseline (1.57%)
-            // But adjust upward for typical credit mix (2.35% for credit-heavy)
-            const avgEffectiveRate = NILSON_BENCHMARKS.weightedAvgMDR + 0.78; // ~2.35% for credit cards
+            // Determine industry category from selected MCC or default to general
+            const industryCategory = currentState.mccCategory || 'general';
+            const industryBenchmark = INDUSTRY_BENCHMARKS[industryCategory] || INDUSTRY_BENCHMARKS.general;
+            const industryName = currentState.mccName || 'General Retail';
+
+            // Use industry-specific benchmarks
+            const avgEffectiveRate = industryBenchmark.average;
             const competitiveMarkup = currentState.totalVolume * 0.0015; // 15 bps = competitive
             const avgControllable = currentState.totalVolume * 0.0025; // 25 bps = average markup
             const highMarkup = currentState.totalVolume * 0.0040; // 40 bps = high markup territory
 
-            const rateStatus = currentState.effectiveRate < avgEffectiveRate ? 'good' :
-                currentState.effectiveRate < avgEffectiveRate + 0.5 ? 'average' : 'poor';
+            const rateStatus = currentState.effectiveRate < industryBenchmark.good ? 'good' :
+                currentState.effectiveRate < industryBenchmark.poor ? 'average' : 'poor';
 
             const controllableStatus = currentState.controllableTotal < avgControllable ? 'good' :
                 currentState.controllableTotal < avgControllable * 1.5 ? 'average' : 'poor';
@@ -3209,7 +3585,24 @@ PCI COMPLIANCE              $19.95
             // Calculate industry comparison
             const industryComparison = getIndustryComparison();
 
+            // MCC info banner
+            const mccBanner = currentState.mccCode ?
+                `<div style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border: 2px solid #3b82f6; border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 1.5rem;">🏷️</span>
+                        <div>
+                            <div style="font-weight: 600; color: #1e40af;">MCC ${currentState.mccCode}: ${currentState.mccName}</div>
+                            <div style="font-size: 0.85rem; color: #3b82f6;">Benchmarks: Good &lt;${industryBenchmark.good}% | Avg ${industryBenchmark.average}% | High &gt;${industryBenchmark.poor}%</div>
+                        </div>
+                    </div>
+                </div>` :
+                `<div class="alert alert-info" style="margin-bottom: 1.5rem;">
+                    <span class="alert-icon">💡</span>
+                    <div>Select an MCC above for industry-specific benchmarks. Currently using general retail benchmarks.</div>
+                </div>`;
+
             content.innerHTML = `
+                ${mccBanner}
                 <div class="benchmark-bar">
                     <div class="benchmark-label">Effective Rate</div>
                     <div class="benchmark-track">
